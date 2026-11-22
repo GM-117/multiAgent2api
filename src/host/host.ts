@@ -239,9 +239,9 @@ export async function createHost() {
     )
   }
   if (!connection.routes.has(CARRIER_PATH)) {
-    ctx.logger?.warn?.(`[codearts2api] 上游未注册载体页 ${CARRIER_PATH}（可选功能，不影响其它能力）`)
+    ctx.logger?.warn?.(`[multiAgent2Api] 上游未注册载体页 ${CARRIER_PATH}（可选功能，不影响其它能力）`)
   }
-  ctx.logger?.info?.(`[codearts2api] 上游契约核对通过：${[...connection.routes.keys()].join(", ")}`)
+  ctx.logger?.info?.(`[multiAgent2Api] 上游契约核对通过：${[...connection.routes.keys()].join(", ")}`)
 
   return {
     ctx,

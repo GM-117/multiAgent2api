@@ -19,18 +19,25 @@
  *
  * ## 优先级
  *
- * 1. `CODEARTS2API_HOME` —— 本程序自己的变量（容器里指向挂载卷）；
- * 2. `~/.codearts2api` —— 默认固定路径。
+ * 1. `MULTIAGENT2API_HOME` —— 本程序当前的名字（容器里指向挂载卷）；
+ * 2. `CODEARTS2API_HOME` —— 旧名字，保留兼容（旧脚本 / 旧 Docker 不炸）；
+ * 3. `~/.multiAgent2Api` —— 默认固定路径；
+ * 4. `~/.codearts2api` —— **仅当新目录还不存在时**的迁移兜底（避免升级后
+ *    用户以为账号丢了）。新目录一旦存在，永远优先用新目录。
  *
  * ⚠️ 默认值刻意**不用 cwd 相对路径**：那样换一个工作目录启动就会读到另一份
  * 账号数据，是极难排查的「账号怎么没了」。
  */
 
+import { existsSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
 /** 本程序默认的状态目录名（放在用户主目录下）。 */
-export const DEFAULT_HOME_DIR = ".codearts2api"
+export const DEFAULT_HOME_DIR = ".multiAgent2Api"
+
+/** 旧版状态目录名（只用于迁移兜底，不再作为默认值）。 */
+export const LEGACY_HOME_DIR = ".codearts2api"
 
 /**
  * 解析本程序的状态目录。
@@ -39,9 +46,18 @@ export const DEFAULT_HOME_DIR = ".codearts2api"
  * @returns 绝对路径。
  */
 export function resolveHome(env = process.env) {
-  const configured = env.CODEARTS2API_HOME
-  if (typeof configured === "string" && configured.trim().length > 0) return configured.trim()
-  return join(homedir(), DEFAULT_HOME_DIR)
+  const configuredNew = env.MULTIAGENT2API_HOME
+  if (typeof configuredNew === "string" && configuredNew.trim().length > 0) return configuredNew.trim()
+
+  const configuredLegacy = env.CODEARTS2API_HOME
+  if (typeof configuredLegacy === "string" && configuredLegacy.trim().length > 0) return configuredLegacy.trim()
+
+  const next = join(homedir(), DEFAULT_HOME_DIR)
+  // 迁移兜底：新默认目录还没建立、旧目录还在时，继续用旧目录。
+  // 一旦新目录存在（正常迁移完成后），就永远用新目录。
+  const legacy = join(homedir(), LEGACY_HOME_DIR)
+  if (!existsSync(next) && existsSync(legacy)) return legacy
+  return next
 }
 
 /**

@@ -1,8 +1,8 @@
 {
-  "name": "codearts2api",
+  "name": "multiagent2api",
   "version": "0.1.0",
   "private": true,
-  "description": "把 dsh-providers-hub 的 Jet Hub 多渠道管理 + OpenAI 网关搬到独立后端（不依赖 DSH 宿主）",
+  "description": "multiAgent2Api：把 dsh-providers-hub 的 Jet Hub 多渠道管理 + OpenAI 网关搬到独立后端（不依赖 DSH 宿主）",
   "type": "module",
   "main": "dist-server/index.js",
   "engines": {

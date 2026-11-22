@@ -21,8 +21,19 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { startTestApp, rpc } from "./helpers"
+import { DEFAULT_HOME_DIR, resolveHome } from "../src/core/home"
 
-test("用 CODEARTS2API_HOME 解析 home，且与 DSH 隔离", async (t) => {
+test("MULTIAGENT2API_HOME 优先于旧变量，默认目录名已改为 .multiAgent2Api", () => {
+  assert.equal(DEFAULT_HOME_DIR, ".multiAgent2Api")
+  assert.equal(
+    resolveHome({ MULTIAGENT2API_HOME: "/tmp/multiagent-next", CODEARTS2API_HOME: "/tmp/multiagent-legacy" }),
+    "/tmp/multiagent-next",
+    "新变量应优先",
+  )
+  assert.equal(resolveHome({ CODEARTS2API_HOME: "/tmp/multiagent-legacy" }), "/tmp/multiagent-legacy", "旧变量仍应兼容")
+})
+
+test("用 MULTIAGENT2API_HOME 解析 home，且与 DSH 隔离", async (t) => {
   // 模拟「装过 DSH 的机器」：环境里已有一个 DSH 的 home 变量。
   const decoy = mkdtempSync(join(tmpdir(), "c2a-decoy-"))
   process.env.DSH_HOME = decoy
@@ -57,7 +68,7 @@ test("用 CODEARTS2API_HOME 解析 home，且与 DSH 隔离", async (t) => {
 
 test("既有凭据可被读取（不会被报「凭据未配置」）", async (t) => {
   const home = mkdtempSync(join(tmpdir(), "c2a-seed-"))
-  process.env.CODEARTS2API_HOME = home
+  process.env.MULTIAGENT2API_HOME = home
   // 预置一份**合法的**凭据文档（与 DSH 同一格式：version/refs）。
   // 用官方的解析器能读它，正是「不再臆造格式」的证明。
   writeFileSync(

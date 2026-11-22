@@ -50,14 +50,14 @@ await new Promise((resolve, reject) => {
 })
 
 const shown = bind === "0.0.0.0" ? "127.0.0.1" : bind
-console.log(`[codearts2api] 管理界面 http://${shown}:${port}/admin`)
-console.log(`[codearts2api] state home: ${host.home}`)
-console.log(`[codearts2api] 已注册路由: ${[...host.routes.keys()].join(", ") || "（无）"}`)
-if (proxyGateway) console.log(`[codearts2api] /v1/* 已反代到本机插件网关（PROXY_GATEWAY=0 可关闭）`)
-else console.log(`[codearts2api] PROXY_GATEWAY=0：本端口不提供 /v1/*，请直连插件网关（默认 127.0.0.1:8326）`)
+console.log(`[multiAgent2Api] 管理界面 http://${shown}:${port}/admin`)
+console.log(`[multiAgent2Api] state home: ${host.home}`)
+console.log(`[multiAgent2Api] 已注册路由: ${[...host.routes.keys()].join(", ") || "（无）"}`)
+if (proxyGateway) console.log(`[multiAgent2Api] /v1/* 已反代到本机插件网关（PROXY_GATEWAY=0 可关闭）`)
+else console.log(`[multiAgent2Api] PROXY_GATEWAY=0：本端口不提供 /v1/*，请直连插件网关（默认 127.0.0.1:8326）`)
 if (!adminAuth) {
   console.warn(
-    "[codearts2api] ⚠️ CODEARTS2API_ADMIN_AUTH=0：管理端鉴权已关闭，/admin 与 /api/jet-hub 无任何保护。" +
+    "[multiAgent2Api] ⚠️ MULTIAGENT2API_ADMIN_AUTH=0（旧名 CODEARTS2API_ADMIN_AUTH）：管理端鉴权已关闭，/admin 与 /api/jet-hub 无任何保护。" +
       "只应在本机调试时这样用。",
   )
 }
@@ -66,11 +66,11 @@ let shuttingDown = false
 async function shutdown(signal) {
   if (shuttingDown) return
   shuttingDown = true
-  console.log(`[codearts2api] 收到 ${signal}，正在关闭…`)
+  console.log(`[multiAgent2Api] 收到 ${signal}，正在关闭…`)
   // 兜底强制退出：插件清理里可能有等待网络的部分（如 captcha 子进程回收），
   // 不能让它无限期吊住进程。仍在飞行的请求由 closeAllConnections 收掉。
   const force = setTimeout(() => {
-    console.warn("[codearts2api] 关闭超时，强制退出")
+    console.warn("[multiAgent2Api] 关闭超时，强制退出")
     server.closeAllConnections?.()
     process.exit(0)
   }, 10_000)
@@ -80,7 +80,7 @@ async function shutdown(signal) {
   try {
     await host.close()
   } catch (error) {
-    console.error(`[codearts2api] 插件清理失败：${String(error)}`)
+    console.error(`[multiAgent2Api] 插件清理失败：${String(error)}`)
   }
   clearTimeout(force)
   process.exit(0)

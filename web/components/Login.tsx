@@ -38,7 +38,7 @@ export function Login({ onSuccess }: { onSuccess: (next: string) => void }) {
       <form className={styles.card} onSubmit={submit}>
         <h1 className={styles.title}>
           <span className={styles.mark} aria-hidden="true" />
-          codearts2api
+          multiAgent2Api
         </h1>
         <p className={styles.sub}>管理后台需要访问密钥</p>
         {error ? <p className={styles.error}>{error}</p> : null}

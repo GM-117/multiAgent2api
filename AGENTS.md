@@ -133,14 +133,14 @@ pnpm run format:check                          # = vp fmt --check .
 
 ### 环境变量
 
-| 变量                         | 默认              | 说明                                                                              |
-| ---------------------------- | ----------------- | --------------------------------------------------------------------------------- |
-| `CODEARTS2API_HOME`          | `~/.codearts2api` | **本程序自己的状态目录**：账号池、凭据、网关 Key、管理密钥全在这里                |
-| `PORT`                       | `8080`            | 本服务端口（管理界面 + RPC + 反代）                                               |
-| `HOST`                       | `0.0.0.0`         | 监听地址                                                                          |
-| `PROXY_GATEWAY`              | **开**            | 把 `/v1/*` 反代到插件网关；置 `0/false/off/no` 关闭（直连 `8326` 仍可用）         |
-| `CODEARTS2API_ADMIN_KEY`     | 自动生成          | **管理后台访问密钥**（与网关 Key 是两把，见[安全边界](#安全边界)）                |
-| `CODEARTS2API_ADMIN_AUTH`    | **开**            | 置 `0` **关闭**管理端鉴权（仅限本机；启动日志会显著告警）                         |
+| 变量                         | 默认                | 说明                                                                              |
+| ---------------------------- | ------------------- | --------------------------------------------------------------------------------- |
+| `MULTIAGENT2API_HOME`        | `~/.multiAgent2Api` | **本程序自己的状态目录**：账号池、凭据、网关 Key、管理密钥全在这里；旧名 `CODEARTS2API_HOME` 仍兼容 |
+| `PORT`                       | `8080`              | 本服务端口（管理界面 + RPC + 反代）                                               |
+| `HOST`                       | `0.0.0.0`           | 监听地址                                                                          |
+| `PROXY_GATEWAY`              | **开**              | 把 `/v1/*` 反代到插件网关；置 `0/false/off/no` 关闭（直连 `8326` 仍可用）         |
+| `MULTIAGENT2API_ADMIN_KEY`   | 自动生成            | **管理后台访问密钥**（与网关 Key 是两把，见[安全边界](#安全边界)）；旧名 `CODEARTS2API_ADMIN_KEY` 仍兼容 |
+| `MULTIAGENT2API_ADMIN_AUTH`  | **开**              | 置 `0` **关闭**管理端鉴权（仅限本机；启动日志会显著告警）；旧名 `CODEARTS2API_ADMIN_AUTH` 仍兼容 |
 | `DSH_OPENAI_GATEWAY_PORT`    | `8326`            | 插件网关端口（只绑 `127.0.0.1`，见下）                                            |
 | `DSH_OPENAI_GATEWAY_ENABLED` | `1`               | 置 `0/false/off/no` 则**强制停用**网关（面板开关会显示被 env 阻止，且无法再打开） |
 | `DSH_OPENAI_GATEWAY_API_KEY` | 自动生成          | 网关 Bearer Key，优先于文件                                                       |
@@ -148,7 +148,9 @@ pnpm run format:check                          # = vp fmt --check .
 
 ### 状态目录
 
-状态全放在自己的目录（默认 `~/.codearts2api`），**不读写** `~/.dsh`，可以与 DSH 共存。
+状态全放在自己的目录（默认 `~/.multiAgent2Api`），**不读写** `~/.dsh`，可以与 DSH 共存。
+
+> 从旧版 `codearts2api` 升级：直接 `mv ~/.codearts2api ~/.multiAgent2Api` 即可。若新目录还不存在、旧目录还在，程序会兜底继续读旧目录（避免升级后误以为账号丢失），但建议尽快完成改名。
 
 ### 从 DSH 或旧版本迁移账号
 
@@ -158,11 +160,14 @@ pnpm run format:check                          # = vp fmt --check .
 （`jet-hub/state.json` + `.credentials.yaml`），直接拷两个文件即可：
 
 ```bash
-mkdir -p ~/.codearts2api/jet-hub
-cp ~/.dsh/jet-hub/state.json       ~/.codearts2api/jet-hub/state.json
-cp ~/.dsh/.credentials.yaml        ~/.codearts2api/.credentials.yaml
-chmod 600 ~/.codearts2api/.credentials.yaml      # 权限校验要求，否则启动即报错
+mkdir -p ~/.multiAgent2Api/jet-hub
+cp ~/.dsh/jet-hub/state.json       ~/.multiAgent2Api/jet-hub/state.json
+cp ~/.dsh/.credentials.yaml        ~/.multiAgent2Api/.credentials.yaml
+chmod 600 ~/.multiAgent2Api/.credentials.yaml    # 权限校验要求，否则启动即报错
 ```
+
+> 从旧版 `codearts2api` 升级则更简单：旧状态目录直接改名即可
+> `mv ~/.codearts2api ~/.multiAgent2Api`。
 
 > ⚠️ 别整目录拷：`~/.dsh` 里还有 DSH 自己的缓存与 records 段，只需上面两个文件。
 
@@ -177,26 +182,26 @@ chmod 600 ~/.codearts2api/.credentials.yaml      # 权限校验要求，否则�
 ### 本机直跑
 
 ```bash
-pnpm run build && PORT=8080 CODEARTS2API_HOME=/var/lib/codearts2api node dist-server/index.js
+pnpm run build && PORT=8080 MULTIAGENT2API_HOME=/var/lib/multiAgent2Api node dist-server/index.js
 ```
 
 一个端口同时提供 `/admin`（带登录页）与 `/v1/*`（反代默认已开）。首次启动会在日志里
 打印一次管理密钥。
 
-> 只想本机随便看看、不想每次输密钥：加 `CODEARTS2API_ADMIN_AUTH=0`。
-> **绝不要**在公网可达的机器上这么设。
+> 只想本机随便看看、不想每次输密钥：加 `MULTIAGENT2API_ADMIN_AUTH=0`
+> （旧名 `CODEARTS2API_ADMIN_AUTH` 仍兼容）。**绝不要**在公网可达的机器上这么设。
 
 ### Docker
 
 ```bash
-docker build -t codearts2api .
-docker run -d --name codearts2api \
+docker build -t multiagent2api .
+docker run -d --name multiagent2api \
   -p 8080:8080 \
-  -v codearts2api-data:/data \
-  codearts2api
+  -v multiagent2api-data:/data \
+  multiagent2api
 ```
 
-`CODEARTS2API_HOME=/data` 已由镜像设好并声明为 `VOLUME`；**不挂卷则容器重建后账号会丢**。
+`MULTIAGENT2API_HOME=/data`（旧名 `CODEARTS2API_HOME` 仍兼容）已由镜像设好并声明为 `VOLUME`；**不挂卷则容器重建后账号会丢**。
 
 > ✅ **管理接口自带鉴权**，`-p 8080:8080` 不会把后台暴露给公网。
 > 首次启动自动生成管理密钥到 `/data/admin-key`，打开 `/admin` 用登录页进入即可，
@@ -206,28 +211,28 @@ docker run -d --name codearts2api \
 查看自动生成的管理密钥：
 
 ```bash
-docker exec codearts2api cat /data/admin-key
+docker exec multiagent2api cat /data/admin-key
 ```
 
-> 想固定一把（比如写进密码管理器）就加 `-e CODEARTS2API_ADMIN_KEY=你的密钥`，
+> 想固定一把（比如写进密码管理器）就加 `-e MULTIAGENT2API_ADMIN_KEY=你的密钥`，
 > 此后不再生成文件。⚠️ 别把它写进公开的 compose / 脚本里。
 
 #### GHCR 预构建镜像
 
 仓库启用 GitHub Actions 后，`Publish image` 工作流会发布 `linux/amd64` 与
 `linux/arm64` 镜像到
-[`ghcr.io/zhuweiyou/codearts2api`](https://github.com/zhuweiyou/codearts2api/pkgs/container/codearts2api)
+[`ghcr.io/gm-117/multiagent2api`](https://github.com/GM-117/multiAgent2api/pkgs/container/multiagent2api)
 （仓库路径自动转为小写，fork 无需改配置）。各标签、各架构的拉取命令也可以直接在
 上面那个包页面的 **Installation** 标签页里复制。
 
 ```bash
 # 拉取最新镜像（latest 始终跟随默认分支的最新一次成功发布）
-docker pull ghcr.io/zhuweiyou/codearts2api:latest
+docker pull ghcr.io/gm-117/multiagent2api:latest
 
-docker run -d --name codearts2api \
+docker run -d --name multiagent2api \
   -p 8080:8080 \
-  -v codearts2api-data:/data \
-  ghcr.io/zhuweiyou/codearts2api:latest
+  -v multiagent2api-data:/data \
+  ghcr.io/gm-117/multiagent2api:latest
 ```
 
 | 触发方式                    | 镜像标签与行为                                               |
@@ -283,18 +288,18 @@ server {
 1. **管理端数据/动作 API 受管理密钥保护**（`/admin/*/api`、`/api/jet-hub`、`/relay/*`；页面与静态资源公开，未登录时前端展示登录框）。它能看到并操作
    你的全部账号凭据，也会**明文回传网关 API Key** —— 所以密钥务必当作密码保管，
    不要写进公开的 compose 文件或截图。
-   - 密钥在 `<CODEARTS2API_HOME>/admin-key`（`0600`）或 `CODEARTS2API_ADMIN_KEY`；
+   - 密钥在 `<MULTIAGENT2API_HOME>/admin-key`（`0600`）或 `MULTIAGENT2API_ADMIN_KEY`（旧名 `CODEARTS2API_ADMIN_KEY` 仍兼容）；
    - 浏览器侧用 **HttpOnly 会话 Cookie**（XSS 拿不到），令牌是派生值、不是明文密钥 ——
      拿到 Cookie 也推不回密钥；
    - 登录失败按来源 IP 限速（10 次 / 10 分钟）；
-   - 想关闭登录（**仅限本机**）：`CODEARTS2API_ADMIN_AUTH=0`，启动日志会告警。
-2. **网关密钥**以明文存在 `<CODEARTS2API_HOME>/openai-gateway/api-key`（`0600`）。
+   - 想关闭登录（**仅限本机**）：`MULTIAGENT2API_ADMIN_AUTH=0`（旧名 `CODEARTS2API_ADMIN_AUTH` 仍兼容），启动日志会告警。
+2. **网关密钥**以明文存在 `<MULTIAGENT2API_HOME>/openai-gateway/api-key`（`0600`）。
    文件被改坏时上游会**明确报错**而不是悄悄换一个 —— 因为静默换钥会让所有已配置的
    客户端同时 401。恢复办法：删掉该文件重启（会重建），或改用
    `DSH_OPENAI_GATEWAY_API_KEY` 环境变量。
    > 这把是**发给调用方**的，与上面的管理密钥刻意分开 —— 否则你把网关 Key 给朋友，
    > 朋友就同时拿到了后台权限。
-3. **调用方 Key 只存哈希。** `<CODEARTS2API_HOME>/caller-keys.json` 里是 `sha256`，
+3. **调用方 Key 只存哈希。** `<MULTIAGENT2API_HOME>/caller-keys.json` 里是 `sha256`，
    比对用常量时间；明文只在新建那次的响应里出现一次，之后任何接口都取不回来。
    这份文件**不是**密钥库 —— 就算泄漏也推不回任何一把可用的 Key（但能看出谁在用、
    能调什么模型，仍按敏感文件对待，默认 `0600`）。
@@ -411,7 +416,7 @@ pnpm start
   防护，报 `unsupported_content`；设计取舍与将来方案见
   [设计决策：外部图片 URL 为什么被拒](#设计决策外部图片-url-为什么被拒)）。
 - 媒体类型按**字节硬校验**：声明 `image/jpeg` 而内容是 png 会被拒。
-- 图片落 `<CODEARTS2API_HOME>/attachments/`，**内容寻址**（文件名 = sha256），重复发只存一份。
+- 图片落 `<MULTIAGENT2API_HOME>/attachments/`，**内容寻址**（文件名 = sha256），重复发只存一份。
 - 沿用官方限制：单张 ≤ 20MB、单条消息 ≤ 20 张 / 200MB、边长 ≤ 8192，支持
   `png` / `jpeg` / `webp` / `gif`。
 
@@ -491,7 +496,7 @@ data URL → 重写请求体再转发，**不改上游**。必须带的防护：
 
 ## 变更记录与发版
 
-历次变更记录在 [GitHub Releases](https://github.com/zhuweiyou/codearts2api/releases)
+历次变更记录在 [GitHub Releases](https://github.com/GM-117/multiAgent2api/releases)
 （不再维护 `CHANGELOG.md`）。本节说明发版方式、与上游的耦合面，以及升级流程。
 
 「上游升级」记录的是 [`dsh-providers-hub`](https://github.com/iJetLi/dsh-providers-hub)
@@ -669,7 +674,7 @@ pnpm start
 启动日志里必须有这一行：
 
 ```
-[codearts2api] 上游契约核对通过：/api/jet-hub, /api/jet-hub/captcha-carrier
+[multiAgent2Api] 上游契约核对通过：/api/jet-hub, /api/jet-hub/captcha-carrier
 ```
 
 **没有这行、或直接抛错**，就说明上游改了端点路径或装配方式 —— 错误信息会告诉你去
@@ -686,7 +691,7 @@ pnpm run build && pnpm test
 ```
 
 > 💡 升级只改 `package.json` / `pnpm-lock.yaml` / `dist/`（前端产物）。
-> **账号数据在 `~/.codearts2api`，与升级无关**。想稳妥可以升级前在 `/admin` 里导出一份备份。
+> **账号数据在 `~/.multiAgent2Api`，与升级无关**。想稳妥可以升级前在 `/admin` 里导出一份备份。
 
 查当前锁定版本：
 

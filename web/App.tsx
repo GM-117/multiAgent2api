@@ -51,7 +51,7 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-c2a-view", view)
     const label = NAV.find((n) => n.id === view)?.label
-    document.title = (label ? label + " · " : "") + "codearts2api"
+    document.title = (label ? label + " · " : "") + "multiAgent2Api"
   }, [view])
 
   // 点外部关闭主题菜单
@@ -73,14 +73,14 @@ export default function App() {
           <a
             className="c2a-brand"
             href="/admin/overview"
-            aria-label="codearts2api 总览"
+            aria-label="multiAgent2Api 总览"
             onClick={(e) => {
               e.preventDefault()
               navigate("/overview")
             }}
           >
             <span className="c2a-brand-mark" aria-hidden="true"></span>
-            <span className="c2a-brand-text">codearts2api</span>
+            <span className="c2a-brand-text">multiAgent2Api</span>
           </a>
           <nav className="c2a-nav" id="c2a-nav" role="tablist" aria-label="主导航">
             {NAV.map((item) => (

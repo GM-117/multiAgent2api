@@ -39,6 +39,8 @@ COPY --from=build /app/dist-server ./dist-server
 
 ENV NODE_ENV=production
 # 本程序自己的状态目录（账号池、凭据、网关 Key、管理密钥），挂卷持久化
+ENV MULTIAGENT2API_HOME=/data
+# 旧名字保留兼容（旧脚本 / 旧 compose 仍可工作）
 ENV CODEARTS2API_HOME=/data
 ENV PORT=8080
 # 上游网关的监听地址硬编码为 127.0.0.1，容器外无法直达，因此由本服务反代 /v1/*

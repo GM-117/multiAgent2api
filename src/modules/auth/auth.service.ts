@@ -15,7 +15,7 @@
  * 同理。现在的取舍是 **页面公开、只拦数据/动作 API**：登录 UI 由前端 `AuthGate`
  * 展示，页面与静态资源公开；`/api/jet-hub`、`/admin/<module>/api`、`/relay/*` 等数据接口
  * 仍要求会话 Cookie 或 Bearer。这样登录页本身不依赖上游 bundle，也不会把
- * “这台机器跑着 codearts2api”藏在一个假象后面。同时**仍然接受**
+ * “这台机器跑着 multiAgent2Api”藏在一个假象后面。同时**仍然接受**
  * `Authorization: Bearer <admin-key>`，否则 curl / 脚本 / 监控就无法访问，
  * 而 README 里本来就有用 curl 调 RPC 的教程。
  *
@@ -32,8 +32,9 @@
  *
  * ## 密钥从哪来
  *
- * 1. `CODEARTS2API_ADMIN_KEY` 环境变量（容器 / CI 用）；
- * 2. `<home>/admin-key` 文件（首次启动自动生成，`0600`）。
+ * 1. `MULTIAGENT2API_ADMIN_KEY` 环境变量（容器 / CI 用）；
+ * 2. `CODEARTS2API_ADMIN_KEY` —— 旧名字，保留兼容；
+ * 3. `<home>/admin-key` 文件（首次启动自动生成，`0600`）。
  *
  * 与上游 `loadOrCreateApiKey` 同一条纪律：**文件内容异常时报错，不静默换新**。
  * 静默换钥的后果是所有已登录的浏览器同时掉线，而用户只会看到「又要重新输密码」，
@@ -58,7 +59,12 @@ export const SESSION_COOKIE = "c2a_admin"
  */
 const ADMIN_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/
 
-/** 会话令牌的 HMAC 输入（常量；改它 = 让所有已发出的 Cookie 失效）。 */
+/**
+ * 会话令牌的 HMAC 输入（常量）。
+ *
+ * ⚠️ 保持旧值**不是漏改品牌**：它是内部签名标签，改掉会让所有已登录浏览器
+ * 立刻掉线。品牌名变了，但这把签名标签刻意不动。
+ */
 const SESSION_LABEL = "codearts2api-admin-session-v1"
 
 /** 会话 Cookie 的有效期（秒）。自用网关取 30 天，避免天天重登。 */
@@ -76,7 +82,7 @@ const SESSION_MAX_AGE = 30 * 24 * 60 * 60
  * @returns `Promise<{ value, path, fromEnv, generated }>`。
  */
 export async function loadOrCreateAdminKey(home, env = process.env) {
-  const configured = env.CODEARTS2API_ADMIN_KEY?.trim()
+  const configured = env.MULTIAGENT2API_ADMIN_KEY?.trim() || env.CODEARTS2API_ADMIN_KEY?.trim()
   if (configured) return { value: configured, path: null, fromEnv: true, generated: false }
 
   const path = join(home, ADMIN_KEY_FILE)
@@ -92,7 +98,7 @@ export async function loadOrCreateAdminKey(home, env = process.env) {
     throw new Error(
       `管理密钥文件内容异常（不是本程序生成的形态）：${path}。` +
         "可能是被手工编辑或被其它程序改写；本程序不会静默更换它，否则所有已登录的浏览器会同时掉线。" +
-        "如需更换：删除该文件后重启（会重新生成，届时需要重新登录），或改用 CODEARTS2API_ADMIN_KEY 环境变量。",
+        "如需更换：删除该文件后重启（会重新生成，届时需要重新登录），或改用 MULTIAGENT2API_ADMIN_KEY（旧名 CODEARTS2API_ADMIN_KEY 仍兼容）环境变量。",
     )
   }
 
@@ -221,7 +227,7 @@ export function clearSessionCookie() {
  * ## 为什么必须有
  *
  * 公网部署 + 一个 43 字符的密钥，理论上暴力破解不可行；但真正危险的场景是
- * **密钥被改成短口令**（`CODEARTS2API_ADMIN_KEY=123456`）或者根本没设时，攻击者
+ * **密钥被改成短口令**（`MULTIAGENT2API_ADMIN_KEY=123456`）或者根本没设时，攻击者
  * 每秒可以试上千次。限速把「猜」的成本变得不可承受，且对正常用户完全无感
  * （谁会在 10 分钟内输错 10 次？）。
  *

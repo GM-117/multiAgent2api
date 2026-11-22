@@ -35,11 +35,12 @@ export function resolveProxyGateway(env = process.env): boolean {
 }
 
 /**
- * 是否启用管理端鉴权（默认开启；`CODEARTS2API_ADMIN_AUTH=0/false/off/no` 关闭）。
+ * 是否启用管理端鉴权（默认开启；`MULTIAGENT2API_ADMIN_AUTH=0/false/off/no` 关闭）。
+ * `CODEARTS2API_ADMIN_AUTH` 是旧名字，保留兼容。
  * 关闭仅用于本机调试。
  */
 export function resolveAdminAuth(env = process.env): boolean {
-  const raw = env.CODEARTS2API_ADMIN_AUTH?.trim().toLowerCase()
-  if (raw === undefined || raw === "") return true
+  const raw = (env.MULTIAGENT2API_ADMIN_AUTH?.trim() || env.CODEARTS2API_ADMIN_AUTH?.trim() || "").toLowerCase()
+  if (raw === "") return true
   return !["0", "false", "off", "no"].includes(raw)
 }

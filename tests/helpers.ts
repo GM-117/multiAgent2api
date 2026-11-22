@@ -39,7 +39,9 @@ export async function startTestApp(options = {}) {
   // ⚠️ 用**本程序自己的**变量：`pinHome()` 会把它写进 `DSH_HOME` /
   //    `DSH_JET_HUB_STATE_DIR`（插件读的那两个），从而与真实 DSH 隔离。
   //    直接设 `DSH_HOME` 是没用的 —— 会被 `pinHome()` 覆盖掉。
-  process.env.CODEARTS2API_HOME = home
+  //    用新名字；同时清掉旧名字，避免外部 shell 残留的旧变量干扰测试。
+  process.env.MULTIAGENT2API_HOME = home
+  delete process.env.CODEARTS2API_HOME
   // 端口 1..65535 且必须「十进制原文与数值一致」（插件的校验），故取高位随机值。
   process.env.DSH_OPENAI_GATEWAY_PORT = String(20_000 + Math.floor(Math.random() * 20_000))
   if (options.gatewayEnabled === false) process.env.DSH_OPENAI_GATEWAY_ENABLED = "0"

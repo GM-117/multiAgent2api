@@ -11,6 +11,7 @@ import { readFile, stat } from "node:fs/promises"
 import { join } from "node:path"
 
 import { sanitizeNext } from "../src/core/safe-next.ts"
+import { resolveAdminAuth } from "../src/config/env.ts"
 import { startTestApp } from "./helpers"
 
 const TEST_ADMIN_KEY = "test-admin-key"
@@ -115,6 +116,8 @@ test("密码错误回 401，且不回显密钥位置/来源", async (t) => {
   const response = await login(app, "wrong-key")
   assert.equal(response.status, 401)
   const text = JSON.stringify(await response.json())
+  assert.doesNotMatch(text, /MULTIAGENT2API_ADMIN_KEY/)
+  assert.doesNotMatch(text, /MULTIAGENT2API_HOME/)
   assert.doesNotMatch(text, /CODEARTS2API_ADMIN_KEY/)
   assert.doesNotMatch(text, /CODEARTS2API_HOME/)
 })
@@ -229,7 +232,13 @@ test("管理密钥文件自动生成、权限 0600 且可重启复用", async (t
   assert.equal((await login(restarted, generated)).status, 200)
 })
 
-test("CODEARTS2API_ADMIN_AUTH=0：会话视为已登录、API 直通", async (t) => {
+test("MULTIAGENT2API_ADMIN_AUTH 优先，CODEARTS2API_ADMIN_AUTH 旧名兼容", () => {
+  assert.equal(resolveAdminAuth({ MULTIAGENT2API_ADMIN_AUTH: "0", CODEARTS2API_ADMIN_AUTH: "1" }), false)
+  assert.equal(resolveAdminAuth({ CODEARTS2API_ADMIN_AUTH: "0" }), false)
+  assert.equal(resolveAdminAuth({}), true)
+})
+
+test("adminAuth=false：会话视为已登录、API 直通", async (t) => {
   const app = await startTestApp({ adminAuth: false })
   t.onTestFinished(() => app.close())
 

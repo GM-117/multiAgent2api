@@ -1,4 +1,4 @@
-# codearts2api
+# multiAgent2Api
 
 把 [`dsh-providers-hub`](https://github.com/iJetLi/dsh-providers-hub) 的
 **Jet Hub 多渠道账号管理**与**本机 OpenAI 网关**搬到独立后端运行，**不依赖 DSH 宿主**，
@@ -15,24 +15,24 @@
 
 ### Docker 部署
 
-推荐用镜像跑。`CODEARTS2API_HOME=/data` 已由镜像设好并声明为 `VOLUME`，**不挂卷则容器
+推荐用镜像跑。镜像把状态目录设为 `/data`（本仓库 Dockerfile 设 `MULTIAGENT2API_HOME`，并保留旧名 `CODEARTS2API_HOME` 兼容）并声明为 `VOLUME`，**不挂卷则容器
 重建后账号会丢**。
 
 ```bash
-docker pull ghcr.io/zhuweiyou/codearts2api:latest
-docker run -d --name codearts2api \
+docker pull ghcr.io/gm-117/multiagent2api:latest
+docker run -d --name multiagent2api \
   -p 8080:8080 \
-  -v codearts2api-data:/data \
-  ghcr.io/zhuweiyou/codearts2api:latest
+  -v multiagent2api-data:/data \
+  ghcr.io/gm-117/multiagent2api:latest
 ```
 
-也可以在仓库根目录自行构建：`docker build -t codearts2api .`，再把上面的镜像名换成
-`codearts2api` 运行。
+也可以在仓库根目录自行构建：`docker build -t multiagent2api .`，再把上面的镜像名换成
+`multiagent2api` 运行。
 
 首次启动会在 `/data/admin-key` 生成管理密钥，用它登录后台：
 
 ```bash
-docker exec codearts2api cat /data/admin-key
+docker exec multiagent2api cat /data/admin-key
 ```
 
 打开 `http://<主机>:8080/admin` 进入。管理接口自带鉴权，`-p 8080:8080` 不会把后台直接
@@ -50,7 +50,7 @@ pnpm start       # 运行后端编译产物 dist-server/index.js
 ```
 
 启动后打开 <http://127.0.0.1:8080/admin>。首次启动会在日志里打印一次管理密钥
-（默认状态目录 `~/.codearts2api`，可用 `CODEARTS2API_HOME` 指定），用它在登录页进入后台。
+（默认状态目录 `~/.multiAgent2Api`，可用 `MULTIAGENT2API_HOME` 指定；旧名 `CODEARTS2API_HOME` 仍兼容），用它在登录页进入后台。
 
 ### 管理界面
 
@@ -118,4 +118,4 @@ pnpm start       # 运行后端编译产物 dist-server/index.js
 
 🛠 完整的镜像标签、环境变量、状态目录、账号迁移、反向代理、安全边界、常见问题，以及
 架构 / 测试 / 上游升级流程等开发内容，见 [`AGENTS.md`](AGENTS.md)。历次变更见
-[GitHub Releases](https://github.com/zhuweiyou/codearts2api/releases)。
+[GitHub Releases](https://github.com/GM-117/multiAgent2api/releases)。

@@ -72,13 +72,15 @@ export async function createHttpServer(host, options: any = {}) {
       logger?.info?.(`[admin-auth] 已生成管理密钥（仅本次打印，之后请查看文件）：${loaded.value}`)
       logger?.info?.(`[admin-auth] 密钥文件：${loaded.path}`)
     } else if (loaded.fromEnv) {
-      logger?.info?.("[admin-auth] 管理密钥取自 CODEARTS2API_ADMIN_KEY 环境变量")
+      logger?.info?.(
+        "[admin-auth] 管理密钥取自环境变量（MULTIAGENT2API_ADMIN_KEY；旧名 CODEARTS2API_ADMIN_KEY 亦兼容）",
+      )
     } else {
       logger?.info?.(`[admin-auth] 管理密钥文件：${loaded.path}`)
     }
   } else if (!adminAuthEnabled) {
     logger?.warn?.(
-      "[admin-auth] ⚠️ 管理端鉴权已被 CODEARTS2API_ADMIN_AUTH=0 关闭 —— /admin 与 /api/jet-hub 对任何能访问该端口的人开放。",
+      "[admin-auth] ⚠️ 管理端鉴权已被 MULTIAGENT2API_ADMIN_AUTH=0（旧名 CODEARTS2API_ADMIN_AUTH）关闭 —— /admin 与 /api/jet-hub 对任何能访问该端口的人开放。",
     )
   }
   const adminKeyEnabled = () => adminAuthEnabled && typeof adminKey === "string" && adminKey !== ""

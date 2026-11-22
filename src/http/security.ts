@@ -64,6 +64,6 @@ export function respondUnauthorized(request: any, response: any, url: any) {
       error: "unauthorized",
       message: "管理端需要鉴权：浏览器请打开 /admin 用管理密钥登录；脚本请带 Authorization: Bearer <admin-key>。",
     },
-    { "www-authenticate": 'Bearer realm="codearts2api admin"' },
+    { "www-authenticate": 'Bearer realm="multiAgent2Api admin"' },
   )
 }
