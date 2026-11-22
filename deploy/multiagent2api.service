@@ -1,0 +1,40 @@
+[Unit]
+Description=multiAgent2Api (Jet Hub multi-channel manager + OpenAI-compatible gateway)
+Documentation=https://github.com/GM-117/multiAgent2Api
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=multiagent2api
+Group=multiagent2api
+WorkingDirectory=/opt/multiagent2api
+EnvironmentFile=/etc/multiagent2api.env
+# @NODE_BIN@ 由 deploy/install.sh 按服务器实际 node 路径替换
+ExecStart=@NODE_BIN@ /opt/multiagent2api/dist-server/index.js
+Restart=always
+RestartSec=3
+
+Environment=TZ=Asia/Shanghai
+Environment=LANG=C.UTF-8
+Environment=NODE_ENV=production
+# 上游部分工具会往 $HOME 写缓存；固定到可写的数据目录
+Environment=HOME=/opt/multiagent2api/data
+
+# 加固：整个文件系统只读，仅数据目录可写
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/multiagent2api/data
+# 进程新建文件默认 0600（凭据 / admin-key / 网关 Key 不能出现 0644）
+UMask=0077
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
