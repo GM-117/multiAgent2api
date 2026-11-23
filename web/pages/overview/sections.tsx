@@ -140,6 +140,17 @@ export function TrendChart({
     )
   }
   const vals = points.map(pick)
+  const hasData = points.some((point, i) => !point.empty && vals[i] > 0)
+  if (!hasData) {
+    return (
+      <>
+        <div className={styles.trend}>
+          <div className={clsx(styles.muted, "c2a-trend-empty")}>暂无数据</div>
+        </div>
+        <div className={styles.axis} />
+      </>
+    )
+  }
   const max = Math.max(1, ...vals)
   return (
     <>
@@ -186,6 +197,9 @@ export function TrendSection({ data }: { data: any }) {
   const labelStep = hourly ? 3 : range === "d7" || range === "d14" ? 2 : 1
   const firstRecent = recent.length > 0 ? new Date(Number(recent[0].ts) + 8 * 3600_000).toISOString() : null
   const coverage = firstRecent === null ? "" : firstRecent.slice(5, 16).replace("T", " ")
+  const todayTotal = Number(data.usage?.today?.requests) || 0
+  const shownToday = points.reduce((sum, point) => sum + point.requests, 0)
+  const missingToday = range === "today" ? Math.max(0, todayTotal - shownToday) : 0
   return (
     <Section title={"趋势 · " + label} right={<RangeButtons value={range} options={RANGES} onChange={setRange} />}>
       <div className={styles.two}>
@@ -202,9 +216,11 @@ export function TrendSection({ data }: { data: any }) {
       </div>
       <div className={clsx(styles.muted, "c2a-trend-label")} style={{ marginTop: 6, fontSize: 11 }}>
         {hourly
-          ? coverage
-            ? `小时级数据来自最近 500 条请求（最早可见 ${coverage}，服务重启后重新累计）；日级数据来自 token 账本。`
-            : "小时级数据来自最近 500 条请求；当前还没有可用的最近请求记录（服务重启后重新累计）。"
+          ? range === "today" && missingToday > 0
+            ? `账本今日共 ${fmt(todayTotal)} 次请求，其中 ${fmt(missingToday)} 次没有小时级明细（上游只在内存保留最近 500 条请求，服务重启后重新累计）。`
+            : coverage
+              ? `小时级数据来自最近 500 条请求（最早可见 ${coverage}，服务重启后重新累计）；日级数据来自 token 账本。`
+              : "小时级数据来自最近 500 条请求；当前还没有可用的最近请求记录（服务重启后重新累计）。"
           : "数据来自 token 账本（按 UTC+8 日聚合）。"}
       </div>
     </Section>
