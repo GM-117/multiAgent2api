@@ -402,17 +402,18 @@ export function CreditsSection({ data }: { data: any }) {
     const pctUsed = u.total > 0 ? (u.used / u.total) * 100 : 0
     const usedInRange = consumption.byUnit[u.unit] || 0
     const channels = providersByUnit.get(u.unit) || []
+    const title =
+      u.unit === "通道"
+        ? "通道 · " + (channels.length ? channels.join(" / ") : "—")
+        : "可用结余 · " + u.unit + (channels.length ? " · " + channels.join(" / ") : "")
     return (
       <Card
         key={i}
-        k={"可用结余 · " + u.unit}
+        k={title}
         v={fmtAmt(u.remaining)}
         f={
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>{"本期消耗 " + fmtAmt(usedInRange)}</div>
-            <div style={{ fontSize: 11, opacity: 0.75, marginBottom: 2 }}>
-              {"渠道 · " + (channels.length ? channels.join(" / ") : "—")}
-            </div>
             <div>
               {"累计已用 " +
                 fmtAmt(u.used) +
