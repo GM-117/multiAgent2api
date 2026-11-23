@@ -61,8 +61,18 @@ bash deploy/pack-local-state.sh /tmp/m2a-state.tar.gz
 bash deploy/deploy.sh --state /tmp/m2a-state.tar.gz --force-state
 ```
 
-迁移后本机 `~/.multiAgent2Api` 保持原样，作为回滚备份；**不要再让两边同时跑**，
-否则同一批 refresh_token 会互相失效。
+迁移后本机 `~/.multiAgent2Api` 保持原样，作为回滚备份；**不要把同一批凭据在两边同时使用**，
+否则同一条 refresh_token 会被先续期的一方兑换掉。
+
+> ⚠️ **CodeArts（华为云）对这一点尤其敏感**：华为 STS 的 `refresh_token` 是**一次性轮换**的。
+> 两边共用同一份凭据时，谁先续期谁就消费掉它，另一方之后每次续期只会得到
+> `STS5.1806 / the refresh token has been used`，且**不会自愈**（面板仍显示「自动续期」，
+> 但积分查询会报 `APIG.0602 the security token has expired`）。
+>
+> 需要本地和服务器都用同一个 CodeArts 账号时，**在两边各自重新登录一次**：每次登录
+> 都会签发一条独立的 token 家族，之后两个实例可以同时运行、互不影响。
+> **不要**再用备份/整目录拷贝把 CodeArts 凭据同步到另一台机器（「整体还原」会覆盖
+> 对方那条家族，重新变成互相失效）；迁移账号时用「单独导入」或直接在目标机登录。
 
 ## 运维命令
 
