@@ -3,6 +3,7 @@ import { BrowserRouter } from "react-router-dom"
 
 import App from "./App"
 import { AuthGate } from "./components/AuthGate"
+import { installJetHubEnhancements } from "./utils/jet-hub-enhance"
 import { installOAuthRelay } from "./utils/oauth-relay"
 import "./App.less"
 
@@ -14,6 +15,9 @@ import "./App.less"
 
 // 尽早安装 OAuth 中继：改写 window.open 与页面上的 loopback 链接，远程部署时回调不再打不开。
 installOAuthRelay()
+
+// 网关弹窗的「点击单条模型 ID 复制」等 DOM 层增强（不改上游 bundle）。
+installJetHubEnhancements()
 
 const el = document.getElementById("c2a-root")
 if (!el) {

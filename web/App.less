@@ -878,3 +878,60 @@ body {
   margin-right: 0;
   margin-bottom: 16px;
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   以下两段是 custom 分支的个人化增强（不改上游 bundle，只在本仓库补层）。
+   选择器都带 #admin-root 以提高权重：上游样式是运行时注入的，晚于本文件。
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* 1) 网关弹窗 · 模型行单击复制单条完整 ID。
+   上游行是只读展示（.dim-jh-gatewayModelRow 刻意没有 pointer 光标），这里补上
+   本仓库需要的交互；复制动作与反馈见 web/utils/jet-hub-enhance.ts。
+   反馈用 ::after 叠在行右侧，不占行内布局、也不往 React 管理的节点里插子节点。 */
+#admin-root .dim-jh-gatewayModal .dim-jh-gatewayModelRow {
+  position: relative;
+  cursor: pointer;
+}
+#admin-root .dim-jh-gatewayModal .dim-jh-gatewayModelRow[data-c2a-copied]::after {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  padding: 1px 7px;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-1, #fff);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+#admin-root .dim-jh-gatewayModal .dim-jh-gatewayModelRow[data-c2a-copied="true"]::after {
+  content: "已复制 ✓";
+  color: var(--dsw-alias-state-success-primary, #2e7d32);
+}
+#admin-root .dim-jh-gatewayModal .dim-jh-gatewayModelRow[data-c2a-copied="error"]::after {
+  content: "复制失败";
+  color: var(--dsw-alias-state-error-primary, #d93025);
+}
+
+/* 2) Token 用量 · 历史热力图 hover 抖动修复。
+   根因：hover 时「当日详情条」（min-height 30 + padding 10 + margin 7 ≈ 47px）
+   替换底部提示行（15 + margin 7 ≈ 22px），内容长高 ~25px；而弹框遮罩是
+   align-items: center ⇒ 整个弹框上移 ~12.5px，12px 的小方块从指针下移走，
+   触发 mouseleave → 详情条消失 → 弹框缩回 → 指针又落回方块……形成帧率级抖动，
+   原生 title 与详情条都来不及稳定显示。
+   修法：把两种状态做成等高（40px 内容盒 + 7px 上边距），hover 前后弹框高度不变。
+   上游注释里的「列表型弹窗固定 height」是更彻底的做法，但那会让空态弹框总是
+   撑到 700px；这里只消除导致指针离开的高度差，保留「上下收紧」的既有观感。 */
+#admin-root .dim-jh-modalBody .dim-jh-ledgerChartHint,
+#admin-root .dim-jh-modalBody .dim-jh-ledgerDayPeek {
+  box-sizing: content-box;
+  min-height: 30px;
+  margin-top: 7px;
+  padding: 5px 9px;
+}
+#admin-root .dim-jh-modalBody .dim-jh-ledgerChartHint {
+  display: flex;
+  align-items: center;
+}
