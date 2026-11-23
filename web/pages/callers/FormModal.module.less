@@ -20,20 +20,23 @@
 .scope .form textarea,
 .scope .form select {
   width: 100%;
+  min-height: 36px;
   box-sizing: border-box;
   border: 1px solid var(--c2a-border);
-  border-radius: 4px;
-  padding: 6px 10px;
+  border-radius: var(--c2a-radius-sm);
+  padding: 8px 10px;
+  background: var(--c2a-surface);
   font: inherit;
   font-size: 13px;
-  color: var(--c2a-text-2);
+  color: var(--c2a-text);
   outline: none;
 }
 
 .scope .form input:focus,
 .scope .form textarea:focus,
 .scope .form select:focus {
-  border-color: var(--c2a-brand);
+  border-color: var(--c2a-text-3);
+  box-shadow: 0 0 0 3px var(--c2a-brand-soft);
 }
 
 .scope .form .err {

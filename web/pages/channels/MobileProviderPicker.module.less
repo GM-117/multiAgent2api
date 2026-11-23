@@ -118,11 +118,11 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 46px;
+  min-height: 44px;
   padding: 8px 10px;
-  border: 1px solid var(--c2a-border-soft);
-  border-radius: 9px;
-  background: var(--c2a-surface);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
   color: var(--c2a-text);
   font: inherit;
   font-size: 13px;
@@ -131,14 +131,14 @@
 }
 
 .item:hover {
-  border-color: color-mix(in srgb, var(--c2a-brand) 32%, var(--c2a-border-soft));
+  border-color: transparent;
   background: var(--c2a-surface-2);
 }
 
 .item[data-selected="true"] {
-  border-color: color-mix(in srgb, var(--c2a-brand) 48%, var(--c2a-border));
-  background: var(--c2a-brand-soft);
-  color: var(--c2a-brand);
+  border-color: var(--c2a-border);
+  background: var(--c2a-surface-2);
+  color: var(--c2a-text);
 }
 
 .icon {

@@ -55,6 +55,16 @@ test("登录页自身没有 next 时回总览，不会把 /admin/login 当回跳
   assert.equal(body.next, "/admin/overview")
 })
 
+test("登录页展示品牌图标（装饰性图片，不重复朗读品牌名）", () => {
+  const { container } = render(<Login onSuccess={() => {}} />)
+  const icon = container.querySelector<HTMLImageElement>("h1 img")
+  assert.ok(icon)
+  assert.ok(icon.src.includes("image/svg+xml"))
+  assert.ok(icon.src.includes("multiAgent2Api"))
+  assert.equal(icon.alt, "")
+  assert.equal(icon.getAttribute("aria-hidden"), "true")
+})
+
 test("登录失败显示后端错误信息", async () => {
   const fetchMock = vi
     .spyOn(globalThis, "fetch")

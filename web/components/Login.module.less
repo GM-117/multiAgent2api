@@ -11,13 +11,11 @@
   box-sizing: border-box;
   width: 100%;
   max-width: 420px;
-  padding: 28px;
-  border-radius: 12px;
+  padding: 32px;
+  border-radius: 14px;
   background: var(--c2a-surface, #fff);
-  border: 1px solid var(--c2a-border, #e5e6eb);
-  box-shadow:
-    0 8px 32px rgb(15 23 42 / 10%),
-    0 1px 2px rgb(15 23 42 / 6%);
+  border: 1px solid var(--c2a-border, #e4e4e7);
+  box-shadow: var(--c2a-shadow);
 }
 .title {
   display: flex;
@@ -28,10 +26,18 @@
   font-weight: 650;
 }
 .mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  background: linear-gradient(135deg, #5b6ffb, #1677ff);
+  display: block;
+  width: 28px;
+  height: 28px;
+  filter: brightness(0) saturate(100%);
+}
+:global(:root[data-theme="dark"]) .mark {
+  filter: brightness(0) invert(1);
+}
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme])) .mark {
+    filter: brightness(0) invert(1);
+  }
 }
 .sub {
   margin: 0 0 20px;
@@ -57,8 +63,8 @@
 }
 .input:focus {
   outline: none;
-  border-color: var(--c2a-brand, #1677ff);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c2a-brand, #1677ff) 16%, transparent);
+  border-color: var(--c2a-text-3);
+  box-shadow: 0 0 0 3px var(--c2a-brand-soft);
 }
 .button {
   box-sizing: border-box;
@@ -67,8 +73,8 @@
   padding: 10px 12px;
   border: 0;
   border-radius: 8px;
-  background: var(--c2a-brand, #1677ff);
-  color: #fff;
+  background: var(--c2a-brand);
+  color: var(--c2a-primary-foreground);
   font: inherit;
   font-weight: 600;
   cursor: pointer;

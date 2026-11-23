@@ -138,16 +138,7 @@ export function FormModal({
             <button type="button" className="dim-jh-btn" onClick={onClose}>
               取消
             </button>
-            <button
-              type="button"
-              className="dim-jh-btn"
-              style={{
-                borderColor: "var(--dsw-alias-brand-primary,#1677ff)",
-                color: "var(--dsw-alias-brand-primary,#1677ff)",
-              }}
-              onClick={submit}
-              disabled={busy}
-            >
+            <button type="button" className="dim-jh-btn" data-kind="primary" onClick={submit} disabled={busy}>
               确定
             </button>
           </div>

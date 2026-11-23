@@ -6,6 +6,7 @@ import { Suspense, useEffect, useRef, useState } from "react"
 import { useLocation, useNavigate, useRoutes } from "react-router-dom"
 
 import { ensureUpstreamPage } from "./api/upstream"
+import brandIconUrl from "./assets/multiagent2api-icon-light.svg?url"
 import { routes } from "./routes"
 
 import { useAdminAuthVisible } from "./hooks/useAdminAuthVisible"
@@ -79,7 +80,7 @@ export default function App() {
               navigate("/overview")
             }}
           >
-            <span className="c2a-brand-mark" aria-hidden="true"></span>
+            <img className="c2a-brand-mark" src={brandIconUrl} alt="" aria-hidden="true" />
             <span className="c2a-brand-text">multiAgent2Api</span>
           </a>
           <nav className="c2a-nav" id="c2a-nav" role="tablist" aria-label="主导航">

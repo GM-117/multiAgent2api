@@ -4,7 +4,7 @@
 
 .scope {
   box-sizing: border-box;
-  padding: 14px 16px 16px;
+  padding: 0 20px 20px;
   border: 1px solid var(--c2a-border);
   border-radius: var(--c2a-radius);
   background: var(--c2a-surface);
@@ -20,7 +20,8 @@
   gap: 0;
   background: var(--c2a-surface);
   border-bottom: 1px solid var(--c2a-border);
-  margin: 0;
+  margin: 0 -20px 20px;
+  padding: 0 8px;
 }
 
 .scope .tabItem {
@@ -85,15 +86,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 28px;
+  height: 32px;
   padding: 0 13px;
   font: inherit;
   font-size: 12px;
+  font-weight: 500;
   line-height: 1;
-  color: var(--c2a-text-2);
+  color: var(--c2a-text);
   background: var(--c2a-surface);
   border: 1px solid var(--c2a-border);
-  border-radius: 4px;
+  border-radius: var(--c2a-radius-sm);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 3%);
   cursor: pointer;
   transition:
     color 0.15s,
@@ -103,14 +106,19 @@
 }
 
 .scope :global(.dim-jh-btn):hover {
-  color: var(--c2a-brand);
-  border-color: color-mix(in srgb, var(--c2a-brand) 35%, var(--c2a-border));
-  background: var(--c2a-brand-soft);
+  color: var(--c2a-text);
+  border-color: var(--c2a-border);
+  background: var(--c2a-surface-2);
 }
 
-.scope :global(.dim-jh-btn):active {
-  color: var(--c2a-brand);
-  border-color: var(--c2a-brand);
+.scope :global(.dim-jh-btn):focus-visible {
+  outline: 2px solid var(--c2a-ring);
+  outline-offset: 2px;
+}
+
+.scope :global(.dim-jh-btn):disabled {
+  opacity: 0.45;
+  box-shadow: none;
 }
 
 .scope :global(.dim-jh-btn)[data-act$="-rm"] {
@@ -125,16 +133,17 @@
 
 .scope :global(.dim-jh-btn)[data-act$="-new"],
 .scope :global(.dim-jh-btn)[data-act="rec-apply"] {
-  color: #fff;
+  color: var(--c2a-primary-foreground);
   background: var(--c2a-brand);
   border-color: var(--c2a-brand);
-  height: 30px;
+  height: 32px;
   padding: 0 16px;
 }
 
 .scope :global(.dim-jh-btn)[data-act$="-new"]:hover,
 .scope :global(.dim-jh-btn)[data-act="rec-apply"]:hover {
-  color: #fff;
-  background: color-mix(in srgb, var(--c2a-brand) 85%, #000);
+  color: var(--c2a-primary-foreground);
+  background: var(--c2a-brand);
   border-color: var(--c2a-brand);
+  opacity: 0.85;
 }

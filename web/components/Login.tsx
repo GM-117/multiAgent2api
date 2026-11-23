@@ -2,6 +2,7 @@
 import { useState } from "react"
 
 import { login } from "../api/auth"
+import brandIconUrl from "../assets/multiagent2api-icon-light.svg?url"
 import styles from "./Login.module.less"
 
 /** 直接访问 /admin/xxx 时没有 ?next=，用当前地址作为登录后的回跳目标。 */
@@ -37,7 +38,7 @@ export function Login({ onSuccess }: { onSuccess: (next: string) => void }) {
     <div className={styles.page}>
       <form className={styles.card} onSubmit={submit}>
         <h1 className={styles.title}>
-          <span className={styles.mark} aria-hidden="true" />
+          <img className={styles.mark} src={brandIconUrl} alt="" aria-hidden="true" />
           multiAgent2Api
         </h1>
         <p className={styles.sub}>管理后台需要访问密钥</p>
