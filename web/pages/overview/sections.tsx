@@ -567,8 +567,8 @@ export function CreditsSection({ data }: { data: any }) {
                   {list.map((p: any, i: number) => {
                     const up = p.total > 0 ? (p.used / p.total) * 100 : 0
                     const t = up >= 90 ? "bad" : up >= 60 ? "warn" : ""
-                    const pkgKey = [p.provider || prov, p.accountId || "", p.name || "", p.unit || ""].join("|")
-                    const pkgRangeUsed = consumption.byPackage[pkgKey] || 0
+                    const pkgKey = typeof p.key === "string" ? p.key : ""
+                    const pkgRangeUsed = pkgKey ? consumption.byPackage[pkgKey] || 0 : 0
                     const dl = leftDays(p.endAt)
                     const timing: string[] = []
                     if (p.expired || (dl !== null && dl < 0)) {

@@ -229,11 +229,73 @@ test("积分消耗按余额快照增量统计，重置不记负数", async (t) =
   assert.equal(second.credits.consumption.periods.today.total, 50)
   assert.equal(second.credits.consumption.periods.today.byUnit.credit, 50)
   assert.equal(second.credits.consumption.periods.today.byProvider.codearts, 50)
-  assert.equal(second.credits.consumption.periods.today.byPackage["codearts|codearts-1|p|credit"], 50)
+  assert.deepEqual(Object.values(second.credits.consumption.periods.today.byPackage), [50])
 
   // 包重置/补发会让 used 下降：不记负数，只更新基线。
   used = 120
   const third: any = await dashboard.snapshot({ fresh: true })
   assert.equal(third.credits.consumption.periods.today.total, 50)
   assert.equal(third.credits.consumption.periods.d7.total, 50)
+})
+
+test("同名积分包按周期字段区分，不把不同包的 used 混在一起", async (t) => {
+  const home = await makeHome(t)
+  await writeFile(
+    join(home, "jet-hub", "state.json"),
+    JSON.stringify({
+      accounts: [{ id: "buddy-1", provider: "buddy", credentialRef: "BUDDY_ACCOUNT_X", enabled: true }],
+    }),
+    "utf8",
+  )
+  let usedA = 10
+  let usedB = 20
+  const rpc = async (method: string) => {
+    if (method !== "credits.balances") return {}
+    return {
+      accounts: [
+        {
+          accountId: "buddy-1",
+          nickname: "u",
+          balance: {
+            total: 100,
+            packages: [
+              {
+                name: "同名包",
+                unit: "credits",
+                total: 50,
+                used: usedA,
+                remaining: 50 - usedA,
+                active: true,
+                cycleStartTime: "2026-11-01 12:00:00",
+                cycleEndTime: "2026-11-24 12:00:00",
+              },
+              {
+                name: "同名包",
+                unit: "credits",
+                total: 50,
+                used: usedB,
+                remaining: 50 - usedB,
+                active: true,
+                cycleStartTime: "2026-11-02 12:00:00",
+                cycleEndTime: "2026-11-25 12:00:00",
+              },
+            ],
+          },
+        },
+      ],
+    }
+  }
+  const dashboard = createDashboard({
+    dataDir: home,
+    rpc,
+    gateway: () => ({}),
+    logger: silent,
+    autoSampleCredits: false,
+  })
+  await dashboard.snapshot({ fresh: true })
+  usedA = 15
+  usedB = 25
+  const second: any = await dashboard.snapshot({ fresh: true })
+  assert.equal(second.credits.consumption.periods.today.total, 10)
+  assert.deepEqual(Object.values(second.credits.consumption.periods.today.byPackage).sort(), [5, 5])
 })

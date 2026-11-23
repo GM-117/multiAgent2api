@@ -70,15 +70,35 @@ export function createDashboard(deps: DashboardOptions) {
   let balanceCache = { at: 0, value: undefined }
   let balanceInflight = null
 
+  /** 余额快照/消耗事件的格式版本。v2 起积分包用稳定身份键（见 packageKey）。 */
+  const CREDITS_HISTORY_VERSION = 2
+
   /**
-   * 积分包的唯一键：provider + 账号 + 包名 + 单位。
-   * 上游没有「积分流水」接口，消耗只能靠**余额增量**推出来。
+   * 积分包的唯一键。
+   *
+   * ⚠️ 不能只用 provider+账号+包名+单位：Buddy 会出现**几十个同名包**
+   * （`CodeBuddy个人版国内运营裂变包` 的每一期都是独立包），只用名字会让
+   * 后一个覆盖前一个，余额增量被算成巨额假消耗。
+   *
+   * 身份用包自己的周期/到期字段：cycleStartTime / cycleEndTime /
+   * deductionEndTime / expiredTime。它们在一期包的整个生命周期内稳定，
+   * 且能区分同期同名包；**不把 total 放进键**，否则上游给包充值/扩容时
+   * 会被当成新包，丢一笔真实消耗。全都缺失时退化为名称+单位（单包场景）。
    */
-  function packageKey(provider, accountId, name, unit) {
-    return [provider, accountId || "", name || "", unit || ""].join("|")
+  function packageKey(provider, accountId, name, unit, meta: any = {}) {
+    return [
+      provider,
+      accountId || "",
+      name || "",
+      unit || "",
+      meta.cycleStartTime || "",
+      meta.cycleEndTime || "",
+      meta.deductionEndTime ?? "",
+      meta.expiredTime || "",
+    ].join("|")
   }
 
-  /** 上一次余额快照（内存 + 磁盘）。磁盘格式：{ firstAt, at, used: { [key]: used } }。 */
+  /** 上一次余额快照（内存 + 磁盘）。磁盘格式：{ version, firstAt, at, used: { [key]: used } }。 */
   let creditsBaseline: { firstAt: number | null; map: Map<string, number> } | null = null
 
   async function readCreditsBaseline() {
@@ -87,7 +107,12 @@ export function createDashboard(deps: DashboardOptions) {
     const map = new Map<string, number>()
     let firstAt: number | null = null
     if (doc && typeof doc === "object" && !Array.isArray(doc)) {
-      // 兼容旧格式（直接就是 {key: used} 的扁平对象）。
+      // 旧格式（v1：扁平 {key: used}，键会撞同名包）整体作废，重新建基线。
+      // 消耗事件同样只认带 key 的 v2 行；旧文件里的错误增量不再参与汇总。
+      if (doc.version !== CREDITS_HISTORY_VERSION) {
+        creditsBaseline = { firstAt: null, map }
+        return creditsBaseline
+      }
       const source = doc.used && typeof doc.used === "object" && !Array.isArray(doc.used) ? doc.used : doc
       for (const [key, value] of Object.entries(source)) {
         const used = Number(value)
@@ -119,12 +144,13 @@ export function createDashboard(deps: DashboardOptions) {
         for (const p of Array.isArray(bal.packages) ? bal.packages : []) {
           const used = Number(p.used)
           if (!Number.isFinite(used)) continue
-          const key = packageKey(provider, acc.accountId, p.name, p.unit)
+          const key = packageKey(provider, acc.accountId, p.name, p.unit, p)
           next.set(key, used)
           const previous = baseline.map.get(key)
           if (previous !== undefined && used > previous) {
             events.push({
               ts: now,
+              key,
               provider,
               accountId: String(acc.accountId || ""),
               name: String(p.name || ""),
@@ -138,7 +164,12 @@ export function createDashboard(deps: DashboardOptions) {
     const firstAt = baseline.firstAt ?? now
     creditsBaseline = { firstAt, map: next }
     try {
-      await writeJsonAtomic(creditsBaselinePath, { firstAt, at: now, used: Object.fromEntries(next) })
+      await writeJsonAtomic(creditsBaselinePath, {
+        version: CREDITS_HISTORY_VERSION,
+        firstAt,
+        at: now,
+        used: Object.fromEntries(next),
+      })
       if (events.length > 0) {
         await appendFile(creditsConsumptionPath, events.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf8")
       }
@@ -167,7 +198,9 @@ export function createDashboard(deps: DashboardOptions) {
       if (!Number.isFinite(ts) || !Number.isFinite(delta) || delta <= 0) continue
       const unit = String(event.unit || "credit")
       const provider = String(event.provider || "")
-      const key = packageKey(provider, event.accountId, event.name, unit)
+      // 只认 v2 带稳定身份键的事件；旧文件里按包名算出的假增量不再汇总。
+      if (typeof event.key !== "string" || event.key === "") continue
+      const key = event.key
       for (const [name, start] of Object.entries(starts)) {
         if (ts < start) continue
         const acc = periods[name]
@@ -508,6 +541,8 @@ export function createDashboard(deps: DashboardOptions) {
             (PERMANENT_BALANCE_PROVIDERS.has(provider) ||
               (PERMANENT_PACKAGE_PROVIDERS.has(provider) && (p.name === "永久积分" || p.name === "长期积分")))
           const row = {
+            // 消耗事件用同一个稳定键，前端表格据此匹配「本期消耗」。
+            key: packageKey(provider, acc.accountId, p.name, unit, p),
             provider,
             accountId: acc.accountId,
             nickname: acc.nickname,
