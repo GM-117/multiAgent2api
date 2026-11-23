@@ -149,7 +149,75 @@ export function createDashboard(deps: DashboardOptions) {
     })
   }
 
-  async function collectUsage(today) {
+  /** 空日占位（趋势图里显式「无数据」）。 */
+  function emptyDay(date) {
+    return {
+      date,
+      requests: 0,
+      ok: 0,
+      errors: 0,
+      inTokens: 0,
+      outTokens: 0,
+      cacheRead: 0,
+      models: {},
+      callers: {},
+      empty: true,
+    }
+  }
+
+  /**
+   * 调用方日志（明细/兜底）与 token 账本（全量网关流量）合并。
+   *
+   * 账本是主口径：它覆盖所有经网关的请求（含未配置调用方 Key 的流量），
+   * 调用方日志只是 caller-keys 开启时的一个子集 —— 两者相加会重复计数。
+   *
+   * ⚠️ 账本 `inputTokens` **不含缓存读**（上游 total = input + cacheRead + output），
+   * 而调用方日志的 `in_tokens` 取自网关响应（已含缓存读）。为统一口径，
+   * 这里把账本的 inputTokens 加上 cacheRead 作为「输入 tokens」；
+   * 前端命中率用 cacheRead / inTokens。
+   */
+  function mergeDay(date, callerDay, ledgerDay) {
+    const base = callerDay || {
+      date,
+      requests: 0,
+      ok: 0,
+      errors: 0,
+      inTokens: 0,
+      outTokens: 0,
+      cacheRead: 0,
+      models: {},
+      callers: {},
+    }
+    const ledgerHasData =
+      ledgerDay !== undefined &&
+      ((ledgerDay.requests || 0) > 0 ||
+        (ledgerDay.inTokens || 0) > 0 ||
+        (ledgerDay.outTokens || 0) > 0 ||
+        (ledgerDay.cacheRead || 0) > 0)
+    if (!ledgerHasData) {
+      const requests = base.requests || 0
+      const inTokens = base.inTokens || 0
+      const outTokens = base.outTokens || 0
+      const cacheRead = base.cacheRead || 0
+      if (requests === 0 && inTokens === 0 && outTokens === 0 && cacheRead === 0) return emptyDay(date)
+      return { ...base, date, cacheRead }
+    }
+    const requests = ledgerDay.requests || 0
+    const errors = ledgerDay.errors || 0
+    return {
+      date,
+      requests,
+      ok: Math.max(0, requests - errors),
+      errors,
+      inTokens: (ledgerDay.inTokens || 0) + (ledgerDay.cacheRead || 0),
+      outTokens: ledgerDay.outTokens || 0,
+      cacheRead: ledgerDay.cacheRead || 0,
+      models: base.models || {},
+      callers: base.callers || {},
+    }
+  }
+
+  async function collectUsage(today, ledgerByDate = new Map()) {
     let files
     try {
       files = (await readdir(usageDir)).filter((f) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(f))
@@ -160,7 +228,17 @@ export function createDashboard(deps: DashboardOptions) {
     const byDate = new Map()
     for (const f of files) {
       const date = f.slice(0, 10)
-      const agg = { date, requests: 0, ok: 0, errors: 0, inTokens: 0, outTokens: 0, models: {}, callers: {} }
+      const agg = {
+        date,
+        requests: 0,
+        ok: 0,
+        errors: 0,
+        inTokens: 0,
+        outTokens: 0,
+        cacheRead: 0,
+        models: {},
+        callers: {},
+      }
       for (const r of await readJsonl(join(usageDir, f))) {
         agg.requests += 1
         if ((r.status === undefined ? 200 : r.status) < 400) agg.ok += 1
@@ -168,6 +246,8 @@ export function createDashboard(deps: DashboardOptions) {
         // in_tokens 可能为 null，必须 or 0
         agg.inTokens += r.in_tokens || 0
         agg.outTokens += r.out_tokens || 0
+        // 缓存读只在网关响应里能拿到；账本缺失时用它兜底命中率。
+        agg.cacheRead += r.cached_tokens || 0
         const model = String(r.model || "?")
         agg.models[model] = (agg.models[model] || 0) + 1
         const caller = String(r.caller || "?")
@@ -176,7 +256,7 @@ export function createDashboard(deps: DashboardOptions) {
       byDate.set(date, agg)
     }
 
-    // 连续 14 天窗口：缺日志的天补 empty。否则前端会把仅有的几根柱子等分铺满整宽，
+    // 连续 14 天窗口：缺数据的天补 empty。否则前端会把仅有的几根柱子等分铺满整宽，
     // 视觉上等于「这几天天天爆量」，缺失的天完全看不见。
     const days = []
     const anchor = new Date(today + "T00:00:00+08:00").getTime()
@@ -184,33 +264,10 @@ export function createDashboard(deps: DashboardOptions) {
       // 必须走 utc8Date，不能 toISOString()：UTC+8 的 00:00-08:00 会退到前一天，
       // 导致「今天」这一格整个消失（症状：今日用量卡有数、趋势图最后一格空白）。
       const key = utc8Date(new Date(anchor - i * 86400000))
-      const hit = byDate.get(key)
-      days.push(
-        hit || {
-          date: key,
-          requests: 0,
-          ok: 0,
-          errors: 0,
-          inTokens: 0,
-          outTokens: 0,
-          models: {},
-          callers: {},
-          empty: true,
-        },
-      )
+      days.push(mergeDay(key, byDate.get(key), ledgerByDate.get(key)))
     }
 
-    const t = byDate.get(today) || {
-      date: today,
-      requests: 0,
-      ok: 0,
-      errors: 0,
-      inTokens: 0,
-      outTokens: 0,
-      models: {},
-      callers: {},
-    }
-    return { days, today: t }
+    return { days, today: mergeDay(today, byDate.get(today), ledgerByDate.get(today)) }
   }
 
   async function collectLedger() {
@@ -220,12 +277,24 @@ export function createDashboard(deps: DashboardOptions) {
     for (const [date, entries] of Object.entries(doc.days)) {
       if (!entries || typeof entries !== "object") continue
       let cacheRead = 0
+      let cacheWrite = 0
+      let reasoning = 0
+      let inTokens = 0
+      let outTokens = 0
+      let errors = 0
       let ttftSum = 0
       let ttftCount = 0
       let requests = 0
       for (const v of Object.values(entries)) {
         if (!v || typeof v !== "object") continue
         cacheRead += v.cacheReadTokens || 0
+        cacheWrite += v.cacheWriteTokens || 0
+        reasoning += v.reasoningTokens || 0
+        // ⚠️ 账本的 inputTokens 不含缓存读（上游 total = input + cacheRead + output）。
+        //    合并进 usage 时由 mergeDay 再加上 cacheRead；这里保留原值供对账。
+        inTokens += v.inputTokens || 0
+        outTokens += v.outputTokens || 0
+        errors += v.errors || 0
         requests += v.requests || 0
         if (v.ttftCount && v.ttftSumMs) {
           ttftSum += v.ttftSumMs
@@ -235,7 +304,12 @@ export function createDashboard(deps: DashboardOptions) {
       out.push({
         date,
         requests,
+        errors,
+        inTokens,
+        outTokens,
         cacheRead,
+        cacheWrite,
+        reasoning,
         ttftAvgMs: ttftCount > 0 ? Math.round(ttftSum / ttftCount) : 0,
       })
     }
@@ -437,6 +511,11 @@ export function createDashboard(deps: DashboardOptions) {
       }
     }
 
+    // token 账本是全量网关流量的权威日聚合；调用方日志只在 caller-keys 开启时
+    // 记录一个子集。先读账本，再作为 usage 的主口径传进去，避免两套数字。
+    const ledger = await collectLedger()
+    const ledgerByDate = new Map(ledger.map((row) => [row.date, row]))
+
     return {
       generatedAt: new Date().toISOString(),
       // 同步/异步都支持：上游 readGatewayState 是 async，统一 await 最省事。
@@ -454,8 +533,8 @@ export function createDashboard(deps: DashboardOptions) {
         keys: Array.isArray(callers?.keys) ? callers.keys.length : 0,
         groups: Array.isArray(callers?.groups) ? callers.groups.length : 0,
       },
-      usage: await collectUsage(today),
-      ledger: await collectLedger(),
+      usage: await collectUsage(today, ledgerByDate),
+      ledger,
       // 积分收支（账本级，不是逐笔流水 —— 上游没有流水接口）
       credits: collectCredits(balanceMap),
     }

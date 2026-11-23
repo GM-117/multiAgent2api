@@ -48,15 +48,16 @@ export function UsageSection({ data }: { data: any }) {
   const ledger = (data.ledger || []).find((x: any) => x.date === t.date) || {}
   const rate = t.requests > 0 ? (t.ok / t.requests) * 100 : null
   const tone = rate === null ? "" : rate >= 99 ? "ok" : rate >= 95 ? "warn" : "bad"
-  const cacheRead = ledger.cacheRead || 0
-  const cacheBase = (t.inTokens || 0) + cacheRead
-  const cacheRate = cacheBase > 0 ? ((cacheRead / cacheBase) * 100).toFixed(1) : "0.0"
+  // t.inTokens 已统一为「含缓存读的总输入」（后端 mergeDay 把账本的 inputTokens
+  // 与 cacheRead 相加；调用方日志的 in_tokens 本来就把缓存算在内）。
+  const cacheRead = t.cacheRead ?? ledger.cacheRead ?? 0
+  const cacheRate = (t.inTokens || 0) > 0 ? (((cacheRead || 0) / t.inTokens) * 100).toFixed(1) : "0.0"
   return (
     <Section title="今日用量">
       <Cards>
         <Card k="今日请求" v={fmt(t.requests)} u="次" f={"成功 " + fmt(t.ok) + " · 失败 " + fmt(t.errors)} />
         <Card k="成功率" v={rate === null ? "—" : rate.toFixed(1)} u="%" f="按今日请求统计" tone={tone} />
-        <Card k="输入 tokens" v={fmtTokens(t.inTokens)} f="上下文占大头" tone="brand" />
+        <Card k="输入 tokens" v={fmtTokens(t.inTokens)} f="含缓存读 · 上下文占大头" tone="brand" />
         <Card k="输出 tokens" v={fmtTokens(t.outTokens)} f="生成部分" />
         <Card k="缓存命中" v={cacheRate} u="%" f={"缓存读 " + fmtTokens(cacheRead)} />
         <Card k="首字延迟" v={ledger.ttftAvgMs ? fmt(ledger.ttftAvgMs) + " ms" : "—"} f="平均 TTFT" />
