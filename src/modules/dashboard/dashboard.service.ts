@@ -10,13 +10,15 @@
  * 数据全部读本机文件，不向上游发请求（余额除外，有 5 分钟缓存 + 单飞）。
  */
 
-import { readdir } from "node:fs/promises"
+import { appendFile, readdir } from "node:fs/promises"
 
-import { readJson, readJsonl } from "../../core/fs-store.ts"
+import { readJson, readJsonl, writeJsonAtomic } from "../../core/fs-store.ts"
 import { join } from "node:path"
 
 /** 余额缓存时长：5 分钟，避免多个浏览器窗口同时打上游。 */
 const BALANCE_TTL_MS = 5 * 60 * 1000
+/** 积分余额采样间隔：消耗统计靠「余额增量」，需要周期性快照。 */
+const CREDITS_SAMPLE_MS = 30 * 60 * 1000
 const PERMANENT_BALANCE_PROVIDERS = new Set(["cline", "codely"])
 const PERMANENT_PACKAGE_PROVIDERS = new Set(["loomy", "magicrew", "magicrewintl"])
 
@@ -50,15 +52,133 @@ export interface DashboardOptions {
   rpc: (method: string, payload?: any) => Promise<any>
   gateway?: () => any
   logger?: any
+  /**
+   * 是否启动积分余额周期采样（默认开）。
+   * 单测需要完全控制余额读数时传 false，避免后台定时器抢先消耗基线。
+   */
+  autoSampleCredits?: boolean
 }
 
 export function createDashboard(deps: DashboardOptions) {
   const dataDir = deps.dataDir
+  const logger = deps.logger ?? console
   const jetHub = join(dataDir, "jet-hub")
   const usageDir = join(dataDir, "caller-usage")
+  const creditsBaselinePath = join(dataDir, "credits-baseline.json")
+  const creditsConsumptionPath = join(dataDir, "credits-consumption.jsonl")
 
   let balanceCache = { at: 0, value: undefined }
   let balanceInflight = null
+
+  /**
+   * 积分包的唯一键：provider + 账号 + 包名 + 单位。
+   * 上游没有「积分流水」接口，消耗只能靠**余额增量**推出来。
+   */
+  function packageKey(provider, accountId, name, unit) {
+    return [provider, accountId || "", name || "", unit || ""].join("|")
+  }
+
+  /** 上一次余额快照（内存 + 磁盘）。磁盘格式：{ firstAt, at, used: { [key]: used } }。 */
+  let creditsBaseline: { firstAt: number | null; map: Map<string, number> } | null = null
+
+  async function readCreditsBaseline() {
+    if (creditsBaseline !== null) return creditsBaseline
+    const doc = await readJson(creditsBaselinePath)
+    const map = new Map<string, number>()
+    let firstAt: number | null = null
+    if (doc && typeof doc === "object" && !Array.isArray(doc)) {
+      // 兼容旧格式（直接就是 {key: used} 的扁平对象）。
+      const source = doc.used && typeof doc.used === "object" && !Array.isArray(doc.used) ? doc.used : doc
+      for (const [key, value] of Object.entries(source)) {
+        const used = Number(value)
+        if (Number.isFinite(used)) map.set(key, used)
+      }
+      if (typeof doc.firstAt === "number" && Number.isFinite(doc.firstAt)) firstAt = doc.firstAt
+    }
+    creditsBaseline = { firstAt, map }
+    return creditsBaseline
+  }
+
+  /**
+   * 记录一次余额快照，并把「used 增量」追加成消耗事件。
+   *
+   * ⚠️ 首次快照只建立基线（不产生事件）；包重置 / 补发导致 used 下降时也不记负数。
+   * 这样 `credits-consumption.jsonl` 里全是**真实消耗增量**，按时间窗口求和即可。
+   */
+  async function recordConsumption(balanceMap) {
+    const now = Date.now()
+    const baseline = await readCreditsBaseline()
+    const next = new Map<string, number>()
+    const events = []
+    for (const [provider, pack] of Object.entries(balanceMap || {}) as [string, any][]) {
+      if (!pack || pack.error) continue
+      const accounts = Array.isArray(pack.accounts) ? pack.accounts : []
+      for (const acc of accounts) {
+        const bal = acc && acc.balance
+        if (!bal) continue
+        for (const p of Array.isArray(bal.packages) ? bal.packages : []) {
+          const used = Number(p.used)
+          if (!Number.isFinite(used)) continue
+          const key = packageKey(provider, acc.accountId, p.name, p.unit)
+          next.set(key, used)
+          const previous = baseline.map.get(key)
+          if (previous !== undefined && used > previous) {
+            events.push({
+              ts: now,
+              provider,
+              accountId: String(acc.accountId || ""),
+              name: String(p.name || ""),
+              unit: String(p.unit || "credit"),
+              delta: used - previous,
+            })
+          }
+        }
+      }
+    }
+    const firstAt = baseline.firstAt ?? now
+    creditsBaseline = { firstAt, map: next }
+    try {
+      await writeJsonAtomic(creditsBaselinePath, { firstAt, at: now, used: Object.fromEntries(next) })
+      if (events.length > 0) {
+        await appendFile(creditsConsumptionPath, events.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf8")
+      }
+    } catch (error) {
+      logger?.warn?.(`[dashboard] 积分消耗快照写入失败：${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  /** 按时间窗口汇总消耗事件（today / 近24小时 / 近3天 / 近7天）。 */
+  async function collectConsumption() {
+    const now = Date.now()
+    const midnight = Date.parse(utc8Date() + "T00:00:00+08:00")
+    const starts = {
+      today: midnight,
+      h24: now - 86400_000,
+      d3: midnight - 2 * 86400_000,
+      d7: midnight - 6 * 86400_000,
+    }
+    const baseline = await readCreditsBaseline()
+    const events = await readJsonl(creditsConsumptionPath)
+    const make = () => ({ total: 0, byUnit: {}, byProvider: {}, byPackage: {} })
+    const periods: any = { today: make(), h24: make(), d3: make(), d7: make() }
+    for (const event of events) {
+      const ts = Number(event?.ts)
+      const delta = Number(event?.delta)
+      if (!Number.isFinite(ts) || !Number.isFinite(delta) || delta <= 0) continue
+      const unit = String(event.unit || "credit")
+      const provider = String(event.provider || "")
+      const key = packageKey(provider, event.accountId, event.name, unit)
+      for (const [name, start] of Object.entries(starts)) {
+        if (ts < start) continue
+        const acc = periods[name]
+        acc.total += delta
+        acc.byUnit[unit] = (acc.byUnit[unit] || 0) + delta
+        if (provider) acc.byProvider[provider] = (acc.byProvider[provider] || 0) + delta
+        acc.byPackage[key] = (acc.byPackage[key] || 0) + delta
+      }
+    }
+    return { since: baseline.firstAt, periods }
+  }
 
   /** 余额：逐渠道串行调用 credits.balances（传数组会报 unsupported provider: undefined）。 */
   async function balances(providers, fresh) {
@@ -79,6 +199,12 @@ export function createDashboard(deps: DashboardOptions) {
         }
       }
       balanceCache = { at: Date.now(), value: out }
+      // 每次真实余额读取都落一次消耗快照；失败不影响余额展示。
+      try {
+        await recordConsumption(out)
+      } catch (error) {
+        logger?.warn?.(`[dashboard] 积分消耗快照失败：${error instanceof Error ? error.message : String(error)}`)
+      }
       return out
     })()
     try {
@@ -204,6 +330,8 @@ export function createDashboard(deps: DashboardOptions) {
     }
     const requests = ledgerDay.requests || 0
     const errors = ledgerDay.errors || 0
+    const ledgerModels =
+      ledgerDay.models && Object.keys(ledgerDay.models).length > 0 ? ledgerDay.models : base.models || {}
     return {
       date,
       requests,
@@ -212,7 +340,7 @@ export function createDashboard(deps: DashboardOptions) {
       inTokens: (ledgerDay.inTokens || 0) + (ledgerDay.cacheRead || 0),
       outTokens: ledgerDay.outTokens || 0,
       cacheRead: ledgerDay.cacheRead || 0,
-      models: base.models || {},
+      models: ledgerModels,
       callers: base.callers || {},
     }
   }
@@ -285,7 +413,8 @@ export function createDashboard(deps: DashboardOptions) {
       let ttftSum = 0
       let ttftCount = 0
       let requests = 0
-      for (const v of Object.values(entries)) {
+      const models = {}
+      for (const [bucketKey, v] of Object.entries(entries)) {
         if (!v || typeof v !== "object") continue
         cacheRead += v.cacheReadTokens || 0
         cacheWrite += v.cacheWriteTokens || 0
@@ -296,6 +425,15 @@ export function createDashboard(deps: DashboardOptions) {
         outTokens += v.outputTokens || 0
         errors += v.errors || 0
         requests += v.requests || 0
+        // 桶键：channel|provider|accountId|model。模型分布必须从这里取 ——
+        // caller-usage 只在配置调用方 Key 时才有，网关 Key 的会话不会出现在里面。
+        const parts = String(bucketKey).split("|")
+        const provider = parts[1] || ""
+        const model = parts[3] || ""
+        if (model !== "") {
+          const key = provider ? `${provider}/${model}` : model
+          models[key] = (models[key] || 0) + (v.requests || 0)
+        }
         if (v.ttftCount && v.ttftSumMs) {
           ttftSum += v.ttftSumMs
           ttftCount += v.ttftCount
@@ -310,6 +448,7 @@ export function createDashboard(deps: DashboardOptions) {
         cacheRead,
         cacheWrite,
         reasoning,
+        models,
         ttftAvgMs: ttftCount > 0 ? Math.round(ttftSum / ttftCount) : 0,
       })
     }
@@ -485,6 +624,37 @@ export function createDashboard(deps: DashboardOptions) {
     }
     return { ...doc, today, ranToday: lastDate === today, lagDays }
   }
+
+  /**
+   * 上游内存里的最近请求（最多 500 条），用于「今天 / 近24小时」的小时级趋势。
+   *
+   * ⚠️ 它不是持久化账本：服务重启后重新累计，超过 500 条的更早请求不可见；
+   *    因此小时级图只承诺「最近可见窗口」，日级趋势仍以 token 账本为准。
+   */
+  async function collectRecent() {
+    if (typeof deps.rpc !== "function") return []
+    try {
+      const value = await deps.rpc("usage.tokenLedger", { limit: 500 })
+      const entries = value?.snapshot?.entries
+      if (!Array.isArray(entries)) return []
+      return entries
+        .map((entry) => ({
+          ts: Number(entry?.ts),
+          channel: String(entry?.channel ?? ""),
+          provider: String(entry?.provider ?? ""),
+          model: String(entry?.model ?? ""),
+          inputTokens: Number(entry?.inputTokens) || 0,
+          outputTokens: Number(entry?.outputTokens) || 0,
+          cacheReadTokens: Number(entry?.cacheReadTokens) || 0,
+          ttftMs: Number(entry?.ttftMs) || 0,
+        }))
+        .filter((entry) => Number.isFinite(entry.ts) && entry.ts > 0)
+        .sort((a, b) => a.ts - b.ts)
+    } catch {
+      return []
+    }
+  }
+
   async function snapshot({ fresh = false } = {}) {
     const today = utc8Date()
     const state = (await readJson(join(jetHub, "state.json"))) || {}
@@ -535,9 +705,36 @@ export function createDashboard(deps: DashboardOptions) {
       },
       usage: await collectUsage(today, ledgerByDate),
       ledger,
+      // 小时级趋势的数据源（最近 500 条请求，重启后重新累计）。
+      recent: await collectRecent(),
       // 积分收支（账本级，不是逐笔流水 —— 上游没有流水接口）
-      credits: collectCredits(balanceMap),
+      // consumption 是按余额快照增量算出的「本期消耗」。
+      credits: { ...collectCredits(balanceMap), consumption: await collectConsumption() },
     }
+  }
+
+  // 积分消耗靠余额增量推导，必须周期性留快照（否则 3/7 天窗口没有基线）。
+  // 30 分钟一轮；unref 不拖住进程/单测退出。
+  if (deps.autoSampleCredits !== false) {
+    const sample = async () => {
+      try {
+        const state = (await readJson(join(jetHub, "state.json"))) || {}
+        const providers = [
+          ...new Set(
+            accountsOf(state)
+              .map((a) => a.provider)
+              .filter(Boolean),
+          ),
+        ]
+        if (providers.length > 0) await balances(providers, true)
+      } catch (error) {
+        logger?.warn?.(`[dashboard] 积分余额采样失败：${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    const timer = setInterval(() => void sample(), CREDITS_SAMPLE_MS)
+    timer.unref?.()
+    // 启动后立即建一次基线；之后每 30 分钟采一次。
+    void sample()
   }
 
   return { snapshot }

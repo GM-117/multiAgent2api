@@ -37,12 +37,14 @@ async function writeCallerLog(home: string, day: string, rows: any[]) {
   )
 }
 
-function snapshotOf(home: string) {
+function snapshotOf(home: string, rpc: (method: string, payload?: any) => Promise<any> = async () => ({})) {
   return createDashboard({
     dataDir: home,
-    rpc: async () => ({}),
+    rpc,
     gateway: () => ({}),
     logger: silent,
+    // 单测完全控制余额读数，不能让后台采样先建基线。
+    autoSampleCredits: false,
   }).snapshot()
 }
 
@@ -86,6 +88,8 @@ test("今日用量与趋势以 token 账本为主（未配置调用方 Key 也�
   assert.equal(snap.usage.today.inTokens, 1300)
   assert.equal(snap.usage.today.outTokens, 200)
   assert.equal(snap.usage.today.cacheRead, 300)
+  // 模型分布必须来自账本桶键（gateway|provider|account|model），不能只靠调用方日志。
+  assert.equal(snap.usage.today.models["codearts/model-a"], 3)
 
   assert.equal(snap.usage.days.length, 14)
   const byDate = new Map(snap.usage.days.map((d: any) => [d.date, d]))
@@ -140,7 +144,96 @@ test("账本与调用方日志同时存在时不重复计数，账本口径优�
   assert.equal(snap.usage.today.requests, 3)
   assert.equal(snap.usage.today.inTokens, 1300)
   assert.equal(snap.usage.today.outTokens, 200)
-  // 调用方日志仍是明细来源：模型/调用方计数保留下来。
-  assert.equal(snap.usage.today.models.m1, 1)
+  // 模型分布以账本为主（调用方日志是子集，不叠加）。
+  assert.equal(snap.usage.today.models["codearts/model-a"], 3)
+  assert.equal(snap.usage.today.models.m1, undefined)
+  // 调用方日志的 caller 维度仍保留。
   assert.equal(snap.usage.today.callers.c1, 1)
+})
+
+test("最近请求进入 snapshot.recent（小时级趋势数据源）", async (t) => {
+  const home = await makeHome(t)
+  const now = Date.now()
+  const snap: any = await snapshotOf(home, async (method) => {
+    if (method !== "usage.tokenLedger") return {}
+    return {
+      snapshot: {
+        entries: [
+          {
+            ts: now - 1000,
+            provider: "codearts",
+            model: "m",
+            channel: "gateway",
+            inputTokens: 10,
+            outputTokens: 2,
+            cacheReadTokens: 3,
+          },
+          {
+            ts: now - 2000,
+            provider: "codearts",
+            model: "m",
+            channel: "gateway",
+            inputTokens: 20,
+            outputTokens: 4,
+            cacheReadTokens: 5,
+          },
+        ],
+      },
+    }
+  })
+  assert.equal(snap.recent.length, 2)
+  assert.ok(snap.recent[0].ts < snap.recent[1].ts)
+  assert.equal(snap.recent[0].inputTokens, 20)
+  assert.equal(snap.recent[1].cacheReadTokens, 3)
+})
+
+test("积分消耗按余额快照增量统计，重置不记负数", async (t) => {
+  const home = await makeHome(t)
+  await writeFile(
+    join(home, "jet-hub", "state.json"),
+    JSON.stringify({
+      accounts: [{ id: "codearts-1", provider: "codearts", credentialRef: "CODEARTS_ACCOUNT_X", enabled: true }],
+    }),
+    "utf8",
+  )
+  let used = 100
+  const rpc = async (method: string) => {
+    if (method !== "credits.balances") return {}
+    return {
+      accounts: [
+        {
+          accountId: "codearts-1",
+          nickname: "u",
+          balance: {
+            total: 1000,
+            packages: [{ name: "p", unit: "credit", total: 1000, used, remaining: 1000 - used, active: true }],
+          },
+        },
+      ],
+    }
+  }
+  const dashboard = createDashboard({
+    dataDir: home,
+    rpc,
+    gateway: () => ({}),
+    logger: silent,
+    autoSampleCredits: false,
+  })
+
+  const first: any = await dashboard.snapshot({ fresh: true })
+  assert.equal(first.credits.consumption.periods.today.total, 0)
+  assert.equal(typeof first.credits.consumption.since, "number")
+
+  used = 150
+  const second: any = await dashboard.snapshot({ fresh: true })
+  assert.equal(second.credits.consumption.periods.today.total, 50)
+  assert.equal(second.credits.consumption.periods.today.byUnit.credit, 50)
+  assert.equal(second.credits.consumption.periods.today.byProvider.codearts, 50)
+  assert.equal(second.credits.consumption.periods.today.byPackage["codearts|codearts-1|p|credit"], 50)
+
+  // 包重置/补发会让 used 下降：不记负数，只更新基线。
+  used = 120
+  const third: any = await dashboard.snapshot({ fresh: true })
+  assert.equal(third.credits.consumption.periods.today.total, 50)
+  assert.equal(third.credits.consumption.periods.d7.total, 50)
 })

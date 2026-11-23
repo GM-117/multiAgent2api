@@ -1,6 +1,7 @@
 import clsx from "clsx"
 import { useState } from "react"
 
+import { providerLabel } from "../../api/providers"
 import { ago, when } from "../../utils/time"
 import { Card } from "./Card"
 import { Cards } from "./Cards"
@@ -8,6 +9,55 @@ import { ProviderHead } from "./ProviderHead"
 import { Section } from "./Section"
 import { fmt, fmtAmt, fmtTokens, leftDays } from "./format"
 import styles from "./sections.module.less"
+import { buildDaily, buildLast24h, buildTodayHourly, topModelsFromRecent, type TrendPoint } from "./trend"
+
+/** 趋势/消耗共用的时间范围选项。 */
+const RANGES = [
+  { key: "today", label: "今天" },
+  { key: "h24", label: "近24小时" },
+  { key: "d3", label: "近3天" },
+  { key: "d7", label: "近7天" },
+  { key: "d14", label: "近14天" },
+] as const
+
+const CREDIT_RANGES = RANGES.filter((range) => range.key !== "d14")
+
+type RangeKey = (typeof RANGES)[number]["key"]
+
+function RangeButtons({
+  value,
+  options,
+  onChange,
+}: {
+  value: string
+  options: readonly { key: string; label: string }[]
+  onChange: (key: any) => void
+}) {
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+      {options.map((option) => (
+        <button
+          key={option.key}
+          type="button"
+          onClick={() => onChange(option.key)}
+          style={{
+            padding: "3px 9px",
+            borderRadius: 6,
+            border: "1px solid rgba(127,127,127,.28)",
+            background: value === option.key ? "rgba(127,127,127,.18)" : "transparent",
+            color: "inherit",
+            font: "inherit",
+            fontSize: 12,
+            lineHeight: "18px",
+            cursor: "pointer",
+          }}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 /* ── 网关状态 ─────────────────────────────────────────────────── */
 
@@ -68,8 +118,18 @@ export function UsageSection({ data }: { data: any }) {
 
 /* ── 近 14 日趋势 ─────────────────────────────────────────────── */
 
-export function TrendChart({ days, pick, fn }: { days: any[]; pick: (x: any) => number; fn: (n: any) => string }) {
-  if (!days || !days.length) {
+export function TrendChart({
+  points,
+  pick,
+  fn,
+  labelStep = 1,
+}: {
+  points: TrendPoint[]
+  pick: (x: TrendPoint) => number
+  fn: (n: any) => string
+  labelStep?: number
+}) {
+  if (!points || !points.length) {
     return (
       <>
         <div className={styles.trend}>
@@ -79,27 +139,31 @@ export function TrendChart({ days, pick, fn }: { days: any[]; pick: (x: any) => 
       </>
     )
   }
-  const vals = days.map(pick)
+  const vals = points.map(pick)
   const max = Math.max(1, ...vals)
   return (
     <>
       <div className={styles.trend}>
-        {days.map((day, i) =>
-          day.empty ? (
-            <div key={day.date} className={styles.col} title={day.date + "：无数据"}>
+        {points.map((point, i) =>
+          point.empty ? (
+            <div key={point.key} className={styles.col} title={point.title + "：无数据"}>
               <i className={clsx(styles.nodata, "c2a-trend-nodata")} />
             </div>
           ) : (
-            <div key={day.date} className={styles.col} title={day.date + "：" + fn(vals[i])}>
+            <div key={point.key} className={styles.col} title={point.title + "：" + fn(vals[i])}>
               <i style={{ height: Math.max(2, Math.round((vals[i] / max) * 100)) + "%" }} />
             </div>
           ),
         )}
       </div>
       <div className={styles.axis}>
-        {days.map((day) => (
-          <span key={day.date} className={clsx(day.empty ? styles.nodata : undefined)}>
-            {String(day.date).slice(5)}
+        {points.map((point, i) => (
+          <span
+            key={point.key}
+            className={clsx(point.empty ? styles.nodata : undefined)}
+            style={i % labelStep === 0 ? undefined : { visibility: "hidden" }}
+          >
+            {point.label}
           </span>
         ))}
       </div>
@@ -108,18 +172,40 @@ export function TrendChart({ days, pick, fn }: { days: any[]; pick: (x: any) => 
 }
 
 export function TrendSection({ data }: { data: any }) {
+  const [range, setRange] = useState<RangeKey>("d14")
+  const recent = Array.isArray(data.recent) ? data.recent : []
   const days = (data.usage && data.usage.days) || []
+  const hourly = range === "today" || range === "h24"
+  const points =
+    range === "today"
+      ? buildTodayHourly(recent)
+      : range === "h24"
+        ? buildLast24h(recent)
+        : buildDaily(days, range === "d3" ? 3 : range === "d7" ? 7 : 14)
+  const label = RANGES.find((item) => item.key === range)?.label ?? ""
+  const labelStep = hourly ? 3 : range === "d7" || range === "d14" ? 2 : 1
+  const firstRecent = recent.length > 0 ? new Date(Number(recent[0].ts) + 8 * 3600_000).toISOString() : null
+  const coverage = firstRecent === null ? "" : firstRecent.slice(5, 16).replace("T", " ")
   return (
-    <Section title="近 14 日趋势">
+    <Section title={"趋势 · " + label} right={<RangeButtons value={range} options={RANGES} onChange={setRange} />}>
       <div className={styles.two}>
         <div>
-          <TrendChart days={days} pick={(x) => x.requests} fn={fmt} />
-          <div className={clsx(styles.muted, "c2a-trend-label")}>每日请求数</div>
+          <TrendChart points={points} pick={(x) => x.requests} fn={fmt} labelStep={labelStep} />
+          <div className={clsx(styles.muted, "c2a-trend-label")}>{hourly ? "每小时请求数" : "每日请求数"}</div>
         </div>
         <div>
-          <TrendChart days={days} pick={(x) => (x.inTokens || 0) + (x.outTokens || 0)} fn={fmtTokens} />
-          <div className={clsx(styles.muted, "c2a-trend-label")}>每日 Token 总量</div>
+          <TrendChart points={points} pick={(x) => x.inTokens + x.outTokens} fn={fmtTokens} labelStep={labelStep} />
+          <div className={clsx(styles.muted, "c2a-trend-label")}>
+            {hourly ? "每小时 Token 总量" : "每日 Token 总量"}
+          </div>
         </div>
+      </div>
+      <div className={clsx(styles.muted, "c2a-trend-label")} style={{ marginTop: 6, fontSize: 11 }}>
+        {hourly
+          ? coverage
+            ? `小时级数据来自最近 500 条请求（最早可见 ${coverage}，服务重启后重新累计）；日级数据来自 token 账本。`
+            : "小时级数据来自最近 500 条请求；当前还没有可用的最近请求记录（服务重启后重新累计）。"
+          : "数据来自 token 账本（按 UTC+8 日聚合）。"}
       </div>
     </Section>
   )
@@ -258,6 +344,7 @@ export function AccountsSection({ data }: { data: any }) {
 export function CreditsSection({ data }: { data: any }) {
   const cr = data.credits
   const [open, setOpen] = useState<Set<string>>(() => new Set())
+  const [range, setRange] = useState<string>("today")
   if (!cr || !cr.packages || cr.packages.length === 0) {
     return (
       <Section title="积分收支">
@@ -265,6 +352,27 @@ export function CreditsSection({ data }: { data: any }) {
       </Section>
     )
   }
+  const consumption = cr.consumption?.periods?.[range] || {
+    total: 0,
+    byUnit: {},
+    byProvider: {},
+    byPackage: {},
+  }
+  const since =
+    typeof cr.consumption?.since === "number" && Number.isFinite(cr.consumption.since)
+      ? new Date(cr.consumption.since).toLocaleString("zh-CN", {
+          timeZone: "Asia/Shanghai",
+          hour12: false,
+        })
+      : null
+  const providersByUnit = new Map<string, string[]>()
+  ;(cr.providers || []).forEach((entry: any) => {
+    if (!entry || !entry.unit) return
+    const list = providersByUnit.get(entry.unit) || []
+    const label = providerLabel(entry.provider)
+    if (list.indexOf(label) < 0) list.push(label)
+    providersByUnit.set(entry.unit, list)
+  })
   const toggle = (prov: string, isOpen: boolean) => {
     setOpen((prev) => {
       const next = new Set(prev)
@@ -276,21 +384,31 @@ export function CreditsSection({ data }: { data: any }) {
 
   const unitCards = cr.units.map((u: any, i: number) => {
     const pctUsed = u.total > 0 ? (u.used / u.total) * 100 : 0
+    const usedInRange = consumption.byUnit[u.unit] || 0
+    const channels = providersByUnit.get(u.unit) || []
     return (
       <Card
         key={i}
         k={"可用结余 · " + u.unit}
         v={fmtAmt(u.remaining)}
         f={
-          "已用 " +
-          fmtAmt(u.used) +
-          " / 总量 " +
-          fmtAmt(u.total) +
-          " · 使用率 " +
-          pctUsed.toFixed(1) +
-          "% · " +
-          u.packs +
-          " 个包"
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>{"本期消耗 " + fmtAmt(usedInRange)}</div>
+            <div style={{ fontSize: 11, opacity: 0.75, marginBottom: 2 }}>
+              {"渠道 · " + (channels.length ? channels.join(" / ") : "—")}
+            </div>
+            <div>
+              {"累计已用 " +
+                fmtAmt(u.used) +
+                " / 总量 " +
+                fmtAmt(u.total) +
+                " · 使用率 " +
+                pctUsed.toFixed(1) +
+                "% · " +
+                u.packs +
+                " 个包"}
+            </div>
+          </div>
         }
         tone={pctUsed >= 90 ? "bad" : pctUsed >= 60 ? "warn" : "ok"}
       />
@@ -368,6 +486,7 @@ export function CreditsSection({ data }: { data: any }) {
       })
       const pct = agg.total > 0 ? (agg.used / agg.total) * 100 : 0
       const tone = pct >= 90 ? "bad" : pct >= 60 ? "warn" : "brand"
+      const rangeUsed = consumption.byProvider[prov] || 0
       return (
         <details
           key={prov}
@@ -381,9 +500,10 @@ export function CreditsSection({ data }: { data: any }) {
               <ProviderHead provider={prov} />
               <span className={styles.unit}>{units.join(" · ")}</span>
               <span className={styles.chanSum}>
-                {"收入 " +
+                <strong style={{ fontWeight: 600 }}>{"本期消耗 " + fmtAmt(rangeUsed)}</strong>
+                {" · 累计收入 " +
                   fmtAmt(agg.total) +
-                  " · 支出 " +
+                  " · 累计支出 " +
                   fmtAmt(agg.used) +
                   " · 可用结余 " +
                   fmtAmt(agg.remaining) +
@@ -421,6 +541,7 @@ export function CreditsSection({ data }: { data: any }) {
                     <th>账号</th>
                     <th className={styles.num}>总量</th>
                     <th className={styles.num}>已用</th>
+                    <th className={styles.num}>本期消耗</th>
                     <th className={styles.num}>剩余</th>
                     <th>使用率</th>
                     <th>到期 / 重置</th>
@@ -430,6 +551,8 @@ export function CreditsSection({ data }: { data: any }) {
                   {list.map((p: any, i: number) => {
                     const up = p.total > 0 ? (p.used / p.total) * 100 : 0
                     const t = up >= 90 ? "bad" : up >= 60 ? "warn" : ""
+                    const pkgKey = [p.provider || prov, p.accountId || "", p.name || "", p.unit || ""].join("|")
+                    const pkgRangeUsed = consumption.byPackage[pkgKey] || 0
                     const dl = leftDays(p.endAt)
                     const timing: string[] = []
                     if (p.expired || (dl !== null && dl < 0)) {
@@ -453,6 +576,7 @@ export function CreditsSection({ data }: { data: any }) {
                         <td className={styles.muted}>{p.nickname || p.accountId || ""}</td>
                         <td className={styles.num}>{fmtAmt(p.total)}</td>
                         <td className={styles.num}>{fmtAmt(p.used)}</td>
+                        <td className={styles.num}>{pkgRangeUsed > 0 ? fmtAmt(pkgRangeUsed) : "—"}</td>
                         <td className={styles.num}>{fmtAmt(p.remaining)}</td>
                         <td style={{ width: "13%" }}>
                           <div className={clsx(styles.bar, "c2a-m0")}>
@@ -476,11 +600,15 @@ export function CreditsSection({ data }: { data: any }) {
 
   const urgent = cr.expiry.d7.concat(cr.expiry.d30, undated).slice(0, 12)
   return (
-    <Section title="积分收支">
+    <Section title="积分收支" right={<RangeButtons value={range} options={CREDIT_RANGES} onChange={setRange} />}>
       <Cards>
         {unitCards}
         {alerts}
       </Cards>
+      <div className={styles.sub2} style={{ marginTop: 8 }}>
+        {"本期消耗按余额快照增量统计" +
+          (since ? "（自 " + since + " 起；更早的历史无法从上游补齐）" : "（尚未建立快照，稍后自动开始）")}
+      </div>
       <div className={styles.sub2}>
         {"按渠道明细（收入、支出和可用结余仅统计当前可用的包；共 " +
           chanMap.size +
@@ -553,10 +681,12 @@ export function ModelsSection({ data }: { data: any }) {
     .sort((a, b) => b[1] - a[1])
   const max = sorted.length ? sorted[0][1] : 1
   const used = (data.usage && data.usage.today && data.usage.today.models) || {}
-  const usedSorted = Object.keys(used)
-    .map((k) => [k, used[k]] as [string, number])
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
+  const usedSorted: Array<[string, number]> = Object.keys(used).length
+    ? Object.keys(used)
+        .map((k) => [k, used[k]] as [string, number])
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+    : topModelsFromRecent(data.recent || [], 10)
   return (
     <Section title="模型分布">
       <div className={styles.two}>
