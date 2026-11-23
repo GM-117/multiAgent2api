@@ -111,7 +111,13 @@ export async function createHttpServer(host, options: any = {}) {
     },
     logger,
   })
-  const modelsService = createModelsService({ rpc: (method, payload) => adminRpc(method, payload, "models"), logger })
+  const modelsService = createModelsService({
+    rpc: (method, payload) => adminRpc(method, payload, "models"),
+    // 上下文窗口 / 逐模型输出上限在真实的 LLM 运行时里（`resolveModelInfo`），
+    // 不在 Jet Hub RPC 的模型清单里。缺失时能力表自动为空，不影响其余接口。
+    llm: host.ctx?.llm,
+    logger,
+  })
   const modelsAdmin = createModelsController({ service: modelsService })
 
   const throttle = new LoginThrottle()

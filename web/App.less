@@ -892,6 +892,25 @@ body {
   position: relative;
   cursor: pointer;
 }
+/* 模型能力（上下文窗口 / 输出上限）：由 jet-hub-enhance.ts 写到 data 属性，
+   这里用 ::after 渲染，避免往 React 管理的行里插子节点。
+   ⚠️ 复制反馈也复用 ::after；下面 [data-c2a-copied] 的规则在后面且权重相同，
+   会临时覆盖本条的 content（1.2 秒后自动恢复能力值）。 */
+#admin-root .dim-jh-gatewayModal .dim-jh-gatewayModelRow[data-c2a-limits]::after {
+  content: attr(data-c2a-limits);
+  flex: 0 0 auto;
+  max-width: 60%;
+  min-width: 0;
+  margin-left: auto;
+  padding-left: 8px;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary, #8f959e);
+  font-size: 11px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 #admin-root .dim-jh-gatewayModal .dim-jh-gatewayModelRow[data-c2a-copied]::after {
   position: absolute;
   top: 50%;

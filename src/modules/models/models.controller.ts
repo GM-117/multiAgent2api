@@ -32,6 +32,13 @@ export function createModelsController({ service }: { service: ModelsService }) 
         sendJson(response, 200, await service.status(providers))
         return
       }
+      case "limits": {
+        const providers = Array.isArray(body.providers)
+          ? body.providers.map((value: any) => String(value)).filter(Boolean)
+          : []
+        sendJson(response, 200, await service.limits(providers))
+        return
+      }
       case "toggle":
         sendJson(
           response,
@@ -58,6 +65,15 @@ export function createModelsController({ service }: { service: ModelsService }) 
       .filter(Boolean)
     if (providers.length === 0) throw new AppError(400, "invalid_providers", "providers 必须是非空字符串数组")
     sendJson(response, 200, await service.status(providers))
+  })
+
+  // ⚠️ 必须排在 `/:provider` 之前：否则 "limits" 会被当成 provider 名。
+  router.get("/limits", async (request, response) => {
+    const raw = request.query.providers
+    const providers = (Array.isArray(raw) ? raw.map(String) : String(raw ?? "").split(","))
+      .map((value) => value.trim())
+      .filter(Boolean)
+    sendJson(response, 200, await service.limits(providers))
   })
 
   router.get("/:provider", async (request, response) => {
